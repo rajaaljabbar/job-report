@@ -1,0 +1,156 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import useAuthStore from '../../stores/authStore';
+import useJobdescStore from '../../stores/jobdescStore';
+
+export default function ProfileSetupPage() {
+  const { user, updateProfile } = useAuthStore();
+  const { items, addJobdesc, updateJobdesc, deleteJobdesc } = useJobdescStore();
+  const navigate = useNavigate();
+
+  const [name, setName] = useState(user?.name || '');
+  const [position, setPosition] = useState(user?.position || '');
+  const [newJobdesc, setNewJobdesc] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText] = useState('');
+
+  const handleSave = () => {
+    updateProfile({ name, position });
+    navigate('/dashboard');
+  };
+
+  const handleAddJobdesc = () => {
+    if (newJobdesc.trim()) {
+      addJobdesc(newJobdesc.trim());
+      setNewJobdesc('');
+    }
+  };
+
+  const handleEditJobdesc = (id, text) => {
+    setEditingId(id);
+    setEditText(text);
+  };
+
+  const handleSaveEdit = () => {
+    if (editText.trim()) {
+      updateJobdesc(editingId, editText.trim());
+      setEditingId(null);
+      setEditText('');
+    }
+  };
+
+  const colors = ['bg-secondary-container', 'bg-tertiary-container', 'bg-primary-container'];
+  const isFirstSetup = location.pathname === '/profile/setup';
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 md:px-6 pt-8 md:pt-12 flex flex-col gap-8">
+      {/* Header */}
+      <div>
+        <h1 className="text-3xl font-bold text-on-surface">Profile &amp; Jobdesc Setup</h1>
+        <p className="text-base text-on-surface-variant mt-2">Manage your personal information and daily responsibilities.</p>
+      </div>
+
+      {/* Section 1: Data Diri */}
+      <section className="bg-surface-container-lowest rounded-xl border border-surface-variant shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-surface-variant bg-surface-bright/50">
+          <h2 className="text-lg font-semibold text-on-surface">Data Diri</h2>
+          <p className="text-sm text-on-surface-variant mt-1">Update your photo and basic details.</p>
+        </div>
+        <div className="p-6 flex flex-col md:flex-row gap-8 items-start">
+          <div className="flex flex-col items-center gap-3 min-w-[120px]">
+            <div className="relative group cursor-pointer">
+              <img
+                src={user?.avatar || ''}
+                alt="Profile"
+                className="w-20 h-20 rounded-full object-cover border-4 border-surface-container-lowest shadow-sm"
+              />
+              <div className="absolute inset-0 bg-on-surface/50 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <span className="material-symbols-outlined text-on-primary">photo_camera</span>
+              </div>
+            </div>
+            <button className="text-xs font-semibold text-primary hover:text-surface-tint transition-colors">Ubah Foto</button>
+          </div>
+
+          <div className="flex-1 w-full grid grid-cols-1 gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-on-surface-variant" htmlFor="fullName">Full Name</label>
+              <input id="fullName" type="text" value={name} onChange={(e) => setName(e.target.value)}
+                className="w-full h-12 px-4 rounded-lg border border-outline-variant bg-surface-container-lowest text-base text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-on-surface-variant" htmlFor="position">Position</label>
+              <input id="position" type="text" value={position} onChange={(e) => setPosition(e.target.value)}
+                className="w-full h-12 px-4 rounded-lg border border-outline-variant bg-surface-container-lowest text-base text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 2: Daftar Jobdesc Utama */}
+      <section className="bg-surface-container-lowest rounded-xl border border-surface-variant shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-surface-variant bg-surface-bright/50 flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-semibold text-on-surface">Daftar Jobdesc Utama</h2>
+            <p className="text-sm text-on-surface-variant mt-1">Define your core responsibilities for reporting.</p>
+          </div>
+        </div>
+        <div className="p-6 flex flex-col gap-3">
+          {items.map((item, idx) => (
+            <div key={item.id} className="flex items-center justify-between p-4 rounded-lg border border-surface-variant bg-surface hover:bg-surface-container-low transition-colors group">
+              <div className="flex items-center gap-3 flex-1">
+                <div className={`w-2 h-8 rounded-full ${colors[idx % colors.length]}`} />
+                {editingId === item.id ? (
+                  <input
+                    value={editText} onChange={(e) => setEditText(e.target.value)}
+                    onBlur={handleSaveEdit}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
+                    className="flex-1 text-base text-on-surface bg-transparent border-b border-primary outline-none"
+                    autoFocus
+                  />
+                ) : (
+                  <span className="text-base text-on-surface">{item.text}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                <button onClick={() => handleEditJobdesc(item.id, item.text)} className="p-2 text-on-surface-variant hover:text-primary hover:bg-primary-container/10 rounded-full transition-colors" title="Edit">
+                  <span className="material-symbols-outlined text-xl">edit</span>
+                </button>
+                <button onClick={() => deleteJobdesc(item.id)} className="p-2 text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-full transition-colors" title="Delete">
+                  <span className="material-symbols-outlined text-xl">delete</span>
+                </button>
+              </div>
+            </div>
+          ))}
+
+          {/* Add Jobdesc */}
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              value={newJobdesc} onChange={(e) => setNewJobdesc(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddJobdesc()}
+              placeholder="Ketik jobdesc baru..."
+              className="flex-1 h-12 px-4 rounded-lg border-2 border-dashed border-outline-variant bg-transparent text-base text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors placeholder:text-outline/60"
+            />
+            <button onClick={handleAddJobdesc}
+              className="h-12 px-4 rounded-lg bg-primary-container/10 text-primary border-2 border-dashed border-primary/30 hover:bg-primary-container/20 hover:border-primary transition-all flex items-center gap-1 text-xs font-semibold whitespace-nowrap">
+              <span className="material-symbols-outlined text-lg">add</span>
+              Tambah
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Buttons */}
+      <div className="flex flex-col gap-4 mt-4 pb-8">
+        <button onClick={handleSave}
+          className="w-full h-12 bg-primary hover:bg-surface-tint text-on-primary text-xs font-bold rounded-lg shadow-sm transition-colors active:scale-[0.98] uppercase tracking-wider">
+          {isFirstSetup ? 'Simpan & Lanjutkan' : 'Simpan'}
+        </button>
+        <button
+          onClick={() => { useAuthStore.getState().logout(); navigate('/login'); }}
+          className="w-full h-12 border border-error text-error hover:bg-error-container/10 text-xs font-bold rounded-lg transition-colors active:scale-[0.98] uppercase tracking-wider">
+          Logout
+        </button>
+      </div>
+    </div>
+  );
+}
