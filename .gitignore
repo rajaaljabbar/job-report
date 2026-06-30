@@ -1,0 +1,52 @@
+# =========================
+# 1. Kredensial & Rahasia (SANGAT PENTING)
+# =========================
+# Jangan biarkan connection string (seperti ke MongoDB Atlas atau database lain) bocor
+.env
+.env.*
+!.env.example
+*.pem
+credentials.json
+
+# =========================
+# 2. File Unggahan (Uploads / Storage)
+# =========================
+# Mengabaikan foto bukti pekerjaan atau dokumen laporan yang di-upload saat testing
+public/uploads/
+public/storage/
+storage/app/public/
+storage/logs/
+storage/framework/
+uploads/
+files/
+images/uploads/
+
+# =========================
+# 3. Hasil Build & Dependencies
+# =========================
+# Frontend / Backend Javascript (Node.js/React/Vue dll)
+node_modules/
+npm-debug.log
+yarn-error.log
+dist/
+build/
+.next/
+.nuxt/
+
+# PHP / Laravel
+vendor/
+*.log
+
+# Python (jika ada script backend/data)
+__pycache__/
+venv/
+.venv/
+*.pyc
+
+# =========================
+# 4. OS & Text Editor
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
