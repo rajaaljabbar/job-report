@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import useAuthStore from '../../stores/authStore';
 
 export default function LoginPage() {
@@ -7,22 +7,47 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const login = useAuthStore((s) => s.login);
+  const [error, setError] = useState('');
+
+  const { login, isAuthenticated, isProfileComplete } = useAuthStore();
   const navigate = useNavigate();
+
+  // If already logged in, redirect appropriately
+  if (isAuthenticated) {
+    return <Navigate to={isProfileComplete ? '/dashboard' : '/profile/setup'} replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+
+    if (!email.trim() || !password.trim()) {
+      setError('Email dan password wajib diisi.');
+      return;
+    }
+
     setLoading(true);
-    await login(email, password);
-    setLoading(false);
-    navigate('/dashboard');
+    try {
+      await login(email, password);
+      // After successful login, authStore automatically sets isAuthenticated & isProfileComplete
+      const state = useAuthStore.getState();
+      navigate(state.isProfileComplete ? '/dashboard' : '/profile/setup');
+    } catch (err) {
+      setError(err.message || 'Login gagal. Periksa email dan password.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    await useAuthStore.getState().loginWithGoogle();
-    setLoading(false);
-    navigate('/dashboard');
+    try {
+      await useAuthStore.getState().loginWithGoogle();
+      // Google OAuth redirects away — no need to navigate here
+    } catch (err) {
+      setError('Login Google gagal.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -33,13 +58,19 @@ export default function LoginPage() {
           <div className="w-16 h-16 bg-primary-container/10 rounded-full flex items-center justify-center mb-4 text-primary">
             <span className="material-symbols-outlined text-4xl">clinical_notes</span>
           </div>
-          <h1 className="text-3xl font-bold text-on-surface tracking-tight">IT Support Tracker</h1>
+          <h1 className="text-3xl font-bold text-on-surface tracking-tight">DayTrack</h1>
           <p className="text-base text-on-surface-variant mt-1">Catat. Laporkan. Selesai.</p>
         </div>
 
         {/* Form */}
         <div className="px-6 pb-10">
           <form onSubmit={handleSubmit} className="space-y-3">
+            {error && (
+              <div className="bg-error-container/30 border border-error/30 text-error text-sm rounded-lg px-4 py-3 flex items-center gap-2">
+                <span className="material-symbols-outlined text-xl">error</span>
+                {error}
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-on-surface mb-1" htmlFor="email">Email</label>
               <div className="relative">

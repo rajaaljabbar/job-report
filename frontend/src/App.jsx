@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
+import AuthGuard from './components/AuthGuard';
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import ProfileSetupPage from './features/profile/ProfileSetupPage';
@@ -12,12 +13,18 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
+        {/* Public Routes (no auth needed) */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 
-        {/* Protected Routes (with layout) */}
-        <Route element={<AppLayout />}>
+        {/* Protected Routes (must be logged in) */}
+        <Route
+          element={
+            <AuthGuard>
+              <AppLayout />
+            </AuthGuard>
+          }
+        >
           <Route path="/dashboard" element={<HomePage />} />
           <Route path="/profile/setup" element={<ProfileSetupPage />} />
           <Route path="/profile/edit" element={<ProfileSetupPage />} />

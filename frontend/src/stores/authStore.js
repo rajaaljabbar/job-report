@@ -1,40 +1,124 @@
 import { create } from 'zustand';
+import { supabase } from '../lib/supabase';
 
-const useAuthStore = create((set) => ({
-  user: {
-    id: '1',
-    name: 'Putra Raja Aljabbar',
-    email: 'putra@it-support.com',
-    position: 'IT Support & Infrastructure',
-    avatar: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBuzZJV9EEKvAeOA3G6xIK_N04ZHCWbPvmSGzkURjjox3o2-6Aa6sX4WkUCKTlIiC3yOwb7yBwukXyLcExqT6597ziMSjoE9y7mO2GwmwOxsXjxMy4q5GZcVwj0f1VTnHPva_1HEddRzYjvXd5GM2s0CD6_QpiM07m7weCcBdYpNiB3Iy0X79RV9QD54CAKMcyQzZN1V9EFIlJlRhKe3fBsTtee1AvNQzTQP7CkwFArJc3Eel2TYuT-eGPGrqL50QMPFifv_Iv4WrA',
-  },
-  isAuthenticated: true,
-  isProfileComplete: true,
+const useAuthStore = create((set, get) => ({
+  user: null,
+  session: null,
+  isAuthenticated: false,
+  isProfileComplete: false,
+  isLoading: true,
 
-  login: async (email, password) => {
-    // Mock login
-    set({ isAuthenticated: true });
-  },
+  // Auto-check session on app load
+  initAuth: async () => {
+    set({ isLoading: true });
+    const { data: { session } } = await supabase.auth.getSession();
 
-  loginWithGoogle: async () => {
-    set({ isAuthenticated: true });
-  },
+    if (session?.user) {
+      const { data: profile } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
 
-  register: async (name, email, password) => {
-    set({
-      isAuthenticated: true,
-      user: { ...useAuthStore.getState().user, name, email },
-      isProfileComplete: false,
+      set({
+        session,
+        user: profile ? {
+          id: profile.id,
+          name: profile.full_name,
+          email: session.user.email,
+          position: profile.position || '',
+          avatar: profile.avatar_url || '',
+        } : null,
+        isAuthenticated: true,
+        isProfileComplete: !!(profile?.full_name && profile?.position),
+        isLoading: false,
+      });
+    } else {
+      set({ user: null, session: null, isAuthenticated: false, isLoading: false });
+    }
+
+    // Listen for auth changes
+    supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        supabase.from('users').select('*').eq('id', session.user.id).single()
+          .then(({ data: profile }) => {
+            set({
+              session,
+              user: profile ? { id: profile.id, name: profile.full_name, email: session.user.email, position: profile.position || '', avatar: profile.avatar_url || '' } : null,
+              isAuthenticated: true,
+              isProfileComplete: !!(profile?.full_name && profile?.position),
+            });
+          });
+      } else {
+        set({ user: null, session: null, isAuthenticated: false, isProfileComplete: false });
+      }
     });
   },
 
-  logout: () => {
-    set({ isAuthenticated: false, user: null });
+  login: async (email, password) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    const { data: profile } = await supabase.from('users').select('*').eq('id', data.user.id).single();
+
+    set({
+      session: data.session,
+      user: profile ? { id: profile.id, name: profile.full_name, email, position: profile.position || '', avatar: profile.avatar_url || '' } : null,
+      isAuthenticated: true,
+      isProfileComplete: !!(profile?.full_name && profile?.position),
+    });
   },
 
-  updateProfile: (data) => {
+  loginWithGoogle: async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin + '/dashboard' },
+    });
+    if (error) throw error;
+  },
+
+  register: async (name, email, password) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
+    if (error) throw error;
+
+    if (data.user) {
+      set({
+        session: data.session,
+        user: { id: data.user.id, name, email, position: '', avatar: '' },
+        isAuthenticated: true,
+        isProfileComplete: false,
+      });
+    }
+  },
+
+  logout: async () => {
+    await supabase.auth.signOut();
+    set({ user: null, session: null, isAuthenticated: false, isProfileComplete: false });
+  },
+
+  updateProfile: async (profileData) => {
+    const { user } = get();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from('users')
+      .upsert({
+        id: user.id,
+        email: user.email,
+        full_name: profileData.name,
+        position: profileData.position,
+        avatar_url: profileData.avatar,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+
+    if (error) throw error;
+
     set((state) => ({
-      user: { ...state.user, ...data },
+      user: { ...state.user, name: profileData.name, position: profileData.position, avatar: profileData.avatar || state.user.avatar },
       isProfileComplete: true,
     }));
   },

@@ -2,14 +2,18 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useJobdescStore from '../../stores/jobdescStore';
 import useReportStore from '../../stores/reportStore';
+import { uploadToCloudinary } from '../../lib/cloudinary';
 
 const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-function getWeekDates() {
+function getWeekDates(weekOffset = 0) {
   const today = new Date();
   const day = today.getDay();
+  // Monday of current week
   const monday = new Date(today);
   monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+  // Apply week offset
+  monday.setDate(monday.getDate() + weekOffset * 7);
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
@@ -17,12 +21,35 @@ function getWeekDates() {
   });
 }
 
+// Max weeks we can go back (within same month)
+function getMaxPastWeeks() {
+  const today = new Date();
+  const day = today.getDay();
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+
+  // First day of current month
+  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+  let weeks = 0;
+  const check = new Date(monday);
+  while (check > firstOfMonth) {
+    check.setDate(check.getDate() - 7);
+    if (check >= firstOfMonth) weeks++;
+  }
+  return weeks;
+}
+
 export default function ReportFormPage() {
   const navigate = useNavigate();
   const { items: jobdescs } = useJobdescStore();
   const submitReport = useReportStore((s) => s.submitReport);
+  const addEvidence = useReportStore((s) => s.addEvidence);
 
-  const weekDates = getWeekDates();
+  const maxPastWeeks = getMaxPastWeeks();
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const weekDates = getWeekDates(weekOffset);
   const today = new Date();
   const todayStr = today.toDateString();
 
@@ -63,27 +90,50 @@ export default function ReportFormPage() {
     if (!isFormValid()) return;
     setSubmitting(true);
 
-    const reportData = {
-      date: selectedDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
-      category:
-        category === 'jobdesc' ? 'primary' : category === 'improvement' ? 'secondary' : 'tertiary',
-      categoryLabel:
-        category === 'jobdesc' ? 'Jobdesc Utama' : category === 'improvement' ? 'Improvement' : 'Help User',
-      title:
-        category === 'improvement'
-          ? title
-          : category === 'jobdesc'
-          ? jobdescs.find((j) => j.id === jobdescId)?.text || ''
-          : `Help: ${userName}`,
-      description,
-      userName: category === 'helpUser' ? userName : isUserRequested ? userName : '',
-      hasEvidence: evidence.length > 0,
-      time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-    };
+    try {
+      // 1. Upload evidence files to Cloudinary first
+      const uploadedEvidence = [];
+      for (const file of evidence) {
+        const result = await uploadToCloudinary(file);
+        uploadedEvidence.push({
+          url: result.url,
+          publicId: result.publicId,
+          fileName: file.name,
+          size: result.size,
+          mimeType: file.type,
+        });
+      }
 
-    submitReport(reportData);
-    setSubmitting(false);
-    navigate('/dashboard');
+      // 2. Create report in Supabase
+      const reportData = {
+        category,
+        dateWorked: selectedDate.toISOString().split('T')[0],
+        title:
+          category === 'improvement'
+            ? title
+            : category === 'jobdesc'
+            ? jobdescs.find((j) => j.id === jobdescId)?.text || ''
+            : `Help: ${userName}`,
+        description,
+        userName: category === 'helpUser' ? userName : isUserRequested ? userName : '',
+        isUserRequested: isUserRequested,
+        jobdescId: category === 'jobdesc' ? jobdescId : null,
+      };
+
+      const report = await submitReport(reportData);
+
+      // 3. Save evidence records
+      for (const ev of uploadedEvidence) {
+        await addEvidence(report.id, ev);
+      }
+
+      setSubmitting(false);
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Submit failed:', err);
+      setSubmitting(false);
+      alert('Gagal menyimpan laporan. Silakan coba lagi.');
+    }
   };
 
   const categories = [
@@ -122,7 +172,27 @@ export default function ReportFormPage() {
 
           {/* Date Picker */}
           <div className="bg-surface-container-lowest border border-surface-variant shadow-sm rounded-xl p-4 flex flex-col gap-3">
-            <label className="text-xs font-semibold text-on-surface-variant">Date of Activity</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-on-surface-variant">Date of Activity</label>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => setWeekOffset((w) => Math.max(w - 1, -maxPastWeeks))}
+                  disabled={weekOffset <= -maxPastWeeks}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <span className="material-symbols-outlined text-xl">chevron_left</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setWeekOffset((w) => Math.min(w + 1, 0))}
+                  disabled={weekOffset >= 0}
+                  className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <span className="material-symbols-outlined text-xl">chevron_right</span>
+                </button>
+              </div>
+            </div>
             <div className="flex overflow-x-auto gap-2 md:grid md:grid-cols-7 pb-2">
               {weekDates.map((d) => {
                 const dateStr = d.toDateString();

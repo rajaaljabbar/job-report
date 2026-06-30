@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import useAuthStore from '../../stores/authStore';
@@ -7,14 +8,24 @@ const COLORS = { jobdesc: '#10b981', improvement: '#2170e4', helpUser: '#e29100'
 
 export default function HomePage() {
   const user = useAuthStore((s) => s.user);
-  const { monthlyStats, recentActivities } = useReportStore();
+  const { monthlyStats, recentActivities, fetchMonthlyStats, fetchRecentActivities } = useReportStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchMonthlyStats();
+    fetchRecentActivities();
+  }, []);
 
   const chartData = [
     { name: 'Jobdesc Utama', value: monthlyStats.jobdesc, color: COLORS.jobdesc },
     { name: 'Improvement', value: monthlyStats.improvement, color: COLORS.improvement },
     { name: 'Help User', value: monthlyStats.helpUser, color: COLORS.helpUser },
   ];
+
+  // SLA: % working days this month with at least 1 report
+  const slaText = monthlyStats.total > 0
+    ? Math.min(Math.round((monthlyStats.daysWithReport / monthlyStats.workingDays) * 100), 100) + '%'
+    : '-';
 
   const categoryConfig = {
     jobdesc: { color: 'bg-primary', text: 'text-primary', bg: 'bg-primary/10', icon: 'computer', label: 'Jobdesc' },
@@ -28,7 +39,7 @@ export default function HomePage() {
       <section className="flex justify-between items-center bg-surface-container-lowest border border-outline-variant/50 shadow-sm rounded-xl p-6">
         <div>
           <h2 className="text-xl md:text-2xl font-bold text-on-surface">Halo, {user?.name?.split(' ')[0] || 'User'} 👋</h2>
-          <p className="text-sm text-on-surface-variant mt-1">{user?.position || 'IT Support'}</p>
+          <p className="text-sm text-on-surface-variant mt-1">{user?.position || 'Tim Support'}</p>
         </div>
         <Link to="/profile/edit" className="w-16 h-16 rounded-full overflow-hidden border-2 border-primary/20 p-1 flex-shrink-0">
           <img alt="Avatar" className="w-full h-full object-cover rounded-full" src={user?.avatar || ''} />
@@ -64,7 +75,7 @@ export default function HomePage() {
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-xs font-semibold text-on-surface-variant">SLA</span>
-              <span className="text-2xl font-bold text-on-surface">94%</span>
+              <span className="text-2xl font-bold text-on-surface">{slaText}</span>
             </div>
           </div>
 

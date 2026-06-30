@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import useAuthStore from '../../stores/authStore';
 
 export default function RegisterPage() {
@@ -9,16 +9,42 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const register = useAuthStore((s) => s.register);
+  const [error, setError] = useState('');
+
+  const { register, isAuthenticated } = useAuthStore();
   const navigate = useNavigate();
+
+  // If already logged in, go to dashboard
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (password !== confirmPassword) return;
+    setError('');
+
+    if (!name.trim() || !email.trim() || !password.trim()) {
+      setError('Semua field wajib diisi.');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Password tidak cocok.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password minimal 6 karakter.');
+      return;
+    }
+
     setLoading(true);
-    await register(name, email, password);
-    setLoading(false);
-    navigate('/profile/setup');
+    try {
+      await register(name, email, password);
+      navigate('/profile/setup');
+    } catch (err) {
+      setError(err.message || 'Pendaftaran gagal. Coba lagi.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -32,10 +58,16 @@ export default function RegisterPage() {
         {/* Header */}
         <div className="text-center mt-6">
           <h1 className="text-2xl font-bold text-on-surface mb-2">Daftar Akun</h1>
-          <p className="text-sm text-on-surface-variant">Buat akun IT Support Tracker baru Anda</p>
+          <p className="text-sm text-on-surface-variant">Buat akun DayTrack baru Anda</p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <div className="bg-error-container/30 border border-error/30 text-error text-sm rounded-lg px-4 py-3 flex items-center gap-2">
+              <span className="material-symbols-outlined text-xl">error</span>
+              {error}
+            </div>
+          )}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-on-surface" htmlFor="fullName">Nama Lengkap</label>
             <div className="relative">

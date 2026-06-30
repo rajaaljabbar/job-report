@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import useAuthStore from '../stores/authStore';
 
 const navItems = [
   { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
@@ -8,14 +9,21 @@ const navItems = [
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const logout = useAuthStore((s) => s.logout);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <aside className="fixed left-0 top-0 h-full w-[260px] hidden md:flex flex-col bg-surface border-r border-surface-variant z-40">
       <div className="flex flex-col h-full py-6">
         {/* Brand */}
         <div className="px-6 mb-8">
-          <h1 className="text-lg font-bold text-primary">IT Support Tracker</h1>
-          <p className="text-xs text-on-surface-variant mt-1">IT Ops Center</p>
+          <h1 className="text-lg font-bold text-primary">DayTrack</h1>
+          <p className="text-xs text-on-surface-variant mt-1">Work Logger</p>
         </div>
 
         {/* New Log Button */}
@@ -61,7 +69,10 @@ export default function Sidebar() {
             <span className="material-symbols-outlined">help</span>
             Help
           </Link>
-          <button className="flex items-center gap-3 px-4 py-3 text-xs font-semibold text-error hover:bg-error-container/20 transition-all rounded-r-lg w-full text-left">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-4 py-3 text-xs font-semibold text-error hover:bg-error-container/20 transition-all rounded-r-lg w-full text-left"
+          >
             <span className="material-symbols-outlined">logout</span>
             Logout
           </button>

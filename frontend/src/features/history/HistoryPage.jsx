@@ -1,15 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import useReportStore from '../../stores/reportStore';
 
 const categoryMap = {
-  primary: { dot: 'bg-primary', bg: 'bg-primary-container/10', text: 'text-primary' },
-  secondary: { dot: 'bg-secondary-container', bg: 'bg-secondary-container/10', text: 'text-secondary' },
-  tertiary: { dot: 'bg-tertiary', bg: 'bg-tertiary-container/10', text: 'text-tertiary' },
+  jobdesc: { dot: 'bg-primary', bg: 'bg-primary-container/10', text: 'text-primary', label: 'Jobdesc Utama' },
+  improvement: { dot: 'bg-secondary-container', bg: 'bg-secondary-container/10', text: 'text-secondary', label: 'Improvement' },
+  helpUser: { dot: 'bg-tertiary', bg: 'bg-tertiary-container/10', text: 'text-tertiary', label: 'Help User' },
 };
 
 export default function HistoryPage() {
-  const { allReports } = useReportStore();
+  const { allReports, fetchReports, setFilters, clearFilters } = useReportStore();
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
 
@@ -20,33 +20,45 @@ export default function HistoryPage() {
   const [catFilter, setCatFilter] = useState('all');
   const [activeFilters, setActiveFilters] = useState(false);
 
+  // Fetch on mount
+  useEffect(() => {
+    fetchReports();
+  }, []);
+
   const applyFilters = () => {
     setActiveFilters(!!(dateFrom || dateTo || catFilter !== 'all'));
+    setFilters({ search, dateRange: dateFrom || dateTo ? { start: dateFrom || null, end: dateTo || null } : null, category: catFilter });
     setFilterOpen(false);
+    fetchReports();
   };
 
   const resetFilters = () => {
     setDateFrom('');
     setDateTo('');
     setCatFilter('all');
+    setSearch('');
     setActiveFilters(false);
+    clearFilters();
     setFilterOpen(false);
+    fetchReports();
   };
 
   const filteredReports = useMemo(() => {
     return allReports.filter((r) => {
-      if (search && !r.title.toLowerCase().includes(search.toLowerCase()) && !(r.userName || '').toLowerCase().includes(search.toLowerCase())) return false;
+      const userName = r.user_name || '';
+      if (search && !r.title.toLowerCase().includes(search.toLowerCase()) && !userName.toLowerCase().includes(search.toLowerCase())) return false;
       if (catFilter !== 'all' && r.category !== catFilter) return false;
       return true;
     });
-  }, [allReports, search, activeFilters, catFilter]);
+  }, [allReports, search, catFilter]);
 
   // Group by date
   const grouped = useMemo(() => {
     const map = {};
     filteredReports.forEach((r) => {
-      if (!map[r.date]) map[r.date] = [];
-      map[r.date].push(r);
+      const dateStr = new Date(r.date_worked).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      if (!map[dateStr]) map[dateStr] = [];
+      map[dateStr].push(r);
     });
     return Object.entries(map);
   }, [filteredReports]);
@@ -107,8 +119,13 @@ export default function HistoryPage() {
             </div>
             <div className="flex flex-col gap-3">
               {reports.map((report) => {
-                const cat = categoryMap[report.category];
+                const cat = categoryMap[report.category] || categoryMap.jobdesc;
                 const isHighlighted = highlightId === report.id;
+                const evidenceCount = report.report_evidence?.length || 0;
+                const firstEvidence = evidenceCount > 0 ? report.report_evidence[0] : null;
+                const timeStr = report.created_at
+                  ? new Date(report.created_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+                  : '';
                 return (
                   <div
                     key={report.id}
@@ -126,22 +143,20 @@ export default function HistoryPage() {
                       <div className="flex-1 flex flex-col justify-between">
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`text-xs font-semibold ${cat.text} px-2 py-0.5 rounded ${cat.bg}`}>{report.categoryLabel}</span>
-                            <span className="text-sm text-on-surface-variant">{report.time}</span>
+                            <span className={`text-xs font-semibold ${cat.text} px-2 py-0.5 rounded ${cat.bg}`}>{cat.label}</span>
+                            {timeStr && <span className="text-sm text-on-surface-variant">{timeStr}</span>}
                           </div>
                           <h4 className="text-lg font-semibold text-on-surface mb-2">{report.title}</h4>
                           <p className="text-sm text-on-surface-variant line-clamp-2 mb-3">{report.description}</p>
                         </div>
                         <div className="flex items-center gap-2 mt-auto">
                           <span className="material-symbols-outlined text-outline text-base">person</span>
-                          <span className="text-xs font-semibold text-on-surface">{report.userName || '-'}</span>
+                          <span className="text-xs font-semibold text-on-surface">{report.user_name || '-'}</span>
                         </div>
                       </div>
-                      {report.hasEvidence && (
+                      {firstEvidence && (
                         <div className="w-full md:w-32 h-24 md:h-auto rounded-lg overflow-hidden shrink-0 border border-outline-variant">
-                          <div className="w-full h-full bg-surface-container flex items-center justify-center text-on-surface-variant">
-                            <span className="material-symbols-outlined text-3xl">image</span>
-                          </div>
+                          <img src={firstEvidence.file_url} alt="Evidence" className="w-full h-full object-cover" />
                         </div>
                       )}
                     </div>

@@ -1,22 +1,57 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../../stores/authStore';
 import useJobdescStore from '../../stores/jobdescStore';
+import { uploadToCloudinary } from '../../lib/cloudinary';
 
 export default function ProfileSetupPage() {
   const { user, updateProfile } = useAuthStore();
-  const { items, addJobdesc, updateJobdesc, deleteJobdesc } = useJobdescStore();
+  const { items, fetchJobdescs, addJobdesc, updateJobdesc, deleteJobdesc } = useJobdescStore();
   const navigate = useNavigate();
+  const location = useLocation();
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    fetchJobdescs();
+  }, []);
 
   const [name, setName] = useState(user?.name || '');
   const [position, setPosition] = useState(user?.position || '');
+  const [avatar, setAvatar] = useState(user?.avatar || '');
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [newJobdesc, setNewJobdesc] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
 
-  const handleSave = () => {
-    updateProfile({ name, position });
-    navigate('/dashboard');
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAvatarUploading(true);
+    try {
+      const result = await uploadToCloudinary(file);
+      setAvatar(result.url);
+    } catch (err) {
+      console.error('Avatar upload failed:', err);
+      alert('Gagal upload foto.');
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      await updateProfile({ name, position, avatar });
+      // Hard redirect to force fresh auth check
+      window.location.href = '/dashboard';
+    } catch (err) {
+      console.error('Save profile failed:', err);
+      alert('Gagal menyimpan profil: ' + (err.message || 'Unknown error'));
+    }
   };
 
   const handleAddJobdesc = () => {
@@ -58,17 +93,43 @@ export default function ProfileSetupPage() {
         </div>
         <div className="p-6 flex flex-col md:flex-row gap-8 items-start">
           <div className="flex flex-col items-center gap-3 min-w-[120px]">
-            <div className="relative group cursor-pointer">
-              <img
-                src={user?.avatar || ''}
-                alt="Profile"
-                className="w-20 h-20 rounded-full object-cover border-4 border-surface-container-lowest shadow-sm"
-              />
+            <div
+              onClick={handleAvatarClick}
+              className="relative group cursor-pointer"
+            >
+              {avatar ? (
+                <img
+                  src={avatar}
+                  alt="Profile"
+                  className="w-20 h-20 rounded-full object-cover border-4 border-surface-container-lowest shadow-sm"
+                />
+              ) : (
+                <div className="w-20 h-20 rounded-full bg-surface-container flex items-center justify-center border-4 border-surface-container-lowest shadow-sm">
+                  <span className="material-symbols-outlined text-4xl text-on-surface-variant">person</span>
+                </div>
+              )}
+              {avatarUploading && (
+                <div className="absolute inset-0 bg-on-surface/50 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
               <div className="absolute inset-0 bg-on-surface/50 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                 <span className="material-symbols-outlined text-on-primary">photo_camera</span>
               </div>
             </div>
-            <button className="text-xs font-semibold text-primary hover:text-surface-tint transition-colors">Ubah Foto</button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+            <button
+              onClick={handleAvatarClick}
+              className="text-xs font-semibold text-primary hover:text-surface-tint transition-colors"
+            >
+              {avatarUploading ? 'Uploading...' : avatar ? 'Ganti Foto' : 'Upload Foto'}
+            </button>
           </div>
 
           <div className="flex-1 w-full grid grid-cols-1 gap-3">
