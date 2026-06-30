@@ -1,0 +1,841 @@
+================================================================================
+  IT SUPPORT TRACKER — FRONT-END UI PLAN
+  Versi: 1.0 | Target: Mobile-First PWA | Update: 30 Juni 2026
+================================================================================
+
+📐 1. TECH STACK & ARSITEKTUR
+--------------------------------------------------------------------------------
+  Framework         : React 18+ (dengan Vite)
+  Styling           : Tailwind CSS v3 + Headless UI
+  Routing           : React Router v6
+  State Management  : Zustand (global) + React Hook Form (form)
+  Charts            : Recharts (Donut Chart di Dashboard)
+  UI Icons          : Lucide React
+  Toast/Notifikasi  : Sonner (toast ringan)
+  Date Picker       : date-fns + custom DatePicker
+  Export Excel      : xlsx (SheetJS) — generate .xlsx di client-side
+  PWA               : vite-plugin-pwa (offline support)
+
+  Pola Arsitektur:
+    src/
+      components/          → Shared UI (Button, Card, Modal, FAB, BottomNav, ...)
+      features/            → Halaman & komponen spesifik fitur
+        auth/              → LoginPage, RegisterPage
+        profile/           → SetupPage, JobdescBuilder
+        dashboard/         → HomePage, HeroChart, RecentActivities
+        report/            → FormInputPage, CategoryPicker, DynamicFields
+        history/           → HistoryPage, TimelineCard, SearchFilter, ExportButton
+      hooks/               → useAuth, useJobdesc, useReport, usePWA
+      stores/              → Zustand stores (authStore, jobdescStore, reportStore)
+      lib/                 → utils, constants, api-client
+      App.tsx
+      main.tsx
+
+================================================================================
+
+🎨 2. DESIGN SYSTEM
+--------------------------------------------------------------------------------
+
+  🎯 Color Palette (Tailwind extended):
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ Primary (Jobdesc Utama)    → emerald-500  #10B981 🟢            │
+  │ Secondary (Improvement)    → blue-500     #3B82F6 🔵            │
+  │ Accent (Help User)         → amber-500    #F59E0B 🟠            │
+  │ Background                 → gray-50      #F9FAFB (light)       │
+  │ Surface / Card             → white        #FFFFFF                │
+  │ Text Primary               → gray-900     #111827                │
+  │ Text Secondary             → gray-500     #6B7280                │
+  │ Danger / Delete            → red-500      #EF4444                │
+  └─────────────────────────────────────────────────────────────────┘
+
+  🏷️ Typography:
+    Font Family  : Inter (Google Fonts) — clean, modern, legible
+    Heading      : font-bold, tracking-tight
+      H1: text-2xl (24px)       — Judul halaman
+      H2: text-xl (20px)        — Judul section
+      H3: text-lg (18px)        — Judul card
+    Body         : text-sm (14px) atau text-base (16px)
+    Caption      : text-xs (12px) — meta info (tanggal, tag)
+
+  📏 Spacing & Radius:
+    Page Padding  : px-4 (16px) — konsisten di semua halaman mobile
+    Card Padding  : p-4 (16px)
+    Card Radius   : rounded-xl (12px) atau rounded-2xl (16px)
+    Button Radius : rounded-lg (8px) atau rounded-full (pill)
+    Gap antar-card: space-y-3 (12px)
+
+  🌓 Shadows & Elevation:
+    Card default   : shadow-sm border border-gray-100
+    Card hover     : shadow-md (pada hover)
+    FAB            : shadow-lg
+    Bottom Nav     : shadow-[0_-2px_10px_rgba(0,0,0,0.05)]
+
+================================================================================
+
+🧭 3. GLOBAL NAVIGATION SYSTEM
+--------------------------------------------------------------------------------
+
+  📱 Mobile (< 768px):
+    ┌──────────────────────────────────────┐
+    │            [Halaman Aktif]           │  ← Header (sticky top)
+    │  ← back  │  Title          │ Avatar  │
+    ├──────────────────────────────────────┤
+    │                                      │
+    │          Konten Halaman              │  ← Scrollable
+    │                                      │
+    ├──────────────────────────────────────┤
+    │   🏠 Home  │  📋 History  │  👤 Profil │  ← Bottom Nav Bar
+    └──────────────────────────────────────┘
+                                ↑
+                          [Fab +]  (pojok kanan bawah, di atas Bottom Nav)
+
+  🖥️ Desktop (≥ 768px):
+    ┌──────┬───────────────────────────────────────┐
+    │ Side │  Header:  [Halo, Nama]      [Avatar]  │
+    │ bar  ├───────────────────────────────────────┤
+    │      │                                       │
+    │  🏠  │         Konten Halaman                │
+    │  📋  │         (max-w-4xl centered)           │
+    │  👤  │                                       │
+    │      │                               [Fab+]  │
+    └──────┴───────────────────────────────────────┘
+
+  Implementasi: Gunakan `useMediaQuery("(min-width: 768px)")` untuk switch
+  antara BottomNav (mobile) dan Sidebar (desktop).
+
+================================================================================
+
+📱 4. SCREEN-BY-SCREEN UI SPECIFICATION
+================================================================================
+
+═══════════════════════════════════════════════════════════════════════════════
+  SCREEN 1: LOGIN PAGE
+═══════════════════════════════════════════════════════════════════════════════
+  Route         : /login
+  Tujuan        : Autentikasi pengguna (manual email/password atau Google OAuth)
+  Akses         : Public (hanya jika belum login)
+
+  Layout Visual (Mobile):
+    ┌─────────────────────────────┐
+    │                             │
+    │        [Logo / Icon]        │  ← Ikon besar (Lucide: ClipboardCheck)
+    │     IT Support Tracker      │  ← Judul app, text-2xl, font-bold
+    │   Catat. Laporkan. Selesai. │  ← Tagline, text-sm, text-gray-400
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │  📧 Email             │  │  ← Input field (border, rounded-lg)
+    │  └───────────────────────┘  │
+    │  ┌───────────────────────┐  │
+    │  │  🔒 Password          │  │  ← Input field + toggle visibility icon
+    │  └───────────────────────┘  │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │       Login           │  │  ← Tombol full-width, emerald-500
+    │  └───────────────────────┘  │
+    │                             │
+    │  ────────  atau  ────────   │  ← Divider dengan teks "atau"
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │  G   Lanjutkan dgn    │  │  ← Tombol putih, border, logo Google
+    │  │      Gmail            │  │     hover:bg-gray-50
+    │  └───────────────────────┘  │
+    │                             │
+    │    Belum punya akun?         │
+    │    Daftar di sini           │  ← Link text, text-emerald-600
+    └─────────────────────────────┘
+
+  Komponen:
+    LoginPage
+      ├── AppLogo          (Logo + judul + tagline)
+      ├── LoginForm        (Email, Password, tombol Login)
+      ├── DividerText      ("atau")
+      ├── GoogleAuthButton (Tombol OAuth)
+      └── RegisterLink     (Link ke halaman register)
+
+  State:
+    - email: string
+    - password: string
+    - showPassword: boolean
+    - isLoading: boolean
+    - errorMessage: string | null
+
+  Validasi:
+    - Email format valid (regex)
+    - Password minimal 6 karakter
+    - Tampilkan error inline di bawah input
+
+═══════════════════════════════════════════════════════════════════════════════
+  SCREEN 1B: REGISTER PAGE
+═══════════════════════════════════════════════════════════════════════════════
+  Route         : /register
+  Tujuan        : Pendaftaran akun baru secara manual
+
+  Layout Visual (Mobile):
+    ┌─────────────────────────────┐
+    │  ← Kembali                  │  ← Tombol back (ke /login)
+    │                             │
+    │        Daftar Akun          │  ← H1
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │  👤 Nama Lengkap      │  │
+    │  └───────────────────────┘  │
+    │  ┌───────────────────────┐  │
+    │  │  📧 Email             │  │
+    │  └───────────────────────┘  │
+    │  ┌───────────────────────┐  │
+    │  │  🔒 Password          │  │
+    │  └───────────────────────┘  │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │       Daftar          │  │  ← Tombol full-width, emerald-500
+    │  └───────────────────────┘  │
+    │                             │
+    │  ────────  atau  ────────   │
+    │  ┌───────────────────────┐  │
+    │  │  G  Lanjutkan dgn Gmail│  │
+    │  └───────────────────────┘  │
+    └─────────────────────────────┘
+
+  State:
+    - name: string
+    - email: string
+    - password: string
+    - confirmPassword: string
+
+  Validasi:
+    - Semua field wajib
+    - Password konfirmasi harus cocok
+
+═══════════════════════════════════════════════════════════════════════════════
+  SCREEN 2: PROFILE & JOBDESC SETUP
+═══════════════════════════════════════════════════════════════════════════════
+  Route         : /profile/setup  (first-time) atau /profile/edit
+  Tujuan        : Setup awal profil + daftar jobdesc; bisa diedit kapan saja
+
+  Layout Visual (Mobile):
+    ┌─────────────────────────────┐
+    │  ← Kembali    Profil Saya   │  ← Top nav
+    ├─────────────────────────────┤
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │   SECTION: DATA DIRI   │  │
+    │  │                       │  │
+    │  │       ( 🧑 )          │  │  ← Avatar 80x80, rounded-full
+    │  │     Ubah Foto         │  │  ← Link text di bawah avatar
+    │  │                       │  │
+    │  │  Nama Lengkap         │  │
+    │  │  ┌──────────────────┐ │  │
+    │  │  │ Putra Raja A.    │ │  │  ← Input field
+    │  │  └──────────────────┘ │  │
+    │  │                       │  │
+    │  │  Jabatan              │  │
+    │  │  ┌──────────────────┐ │  │
+    │  │  │ IT Support       │ │  │
+    │  │  └──────────────────┘ │  │
+    │  └───────────────────────┘  │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │ SECTION: DAFTAR        │  │
+    │  │ JOBDESC UTAMA          │  │
+    │  │                       │  │
+    │  │ ┌───────────────────┐ │  │
+    │  │ │ Monitoring &      │ │  │  ← Jobdesc Item Card
+    │  │ │ troubleshooting   │ │  │     ada icon ✏️ (edit) & 🗑️ (delete)
+    │  │ │ jaringan...       │ │  │     di sisi kanan
+    │  │ │         ✏️  🗑️   │ │  │
+    │  │ └───────────────────┘ │  │
+    │  │ ┌───────────────────┐ │  │
+    │  │ │ Hardening &       │ │  │
+    │  │ │ update software   │ │  │
+    │  │ │ staff...          │ │  │
+    │  │ │         ✏️  🗑️   │ │  │
+    │  │ └───────────────────┘ │  │
+    │  │                       │  │
+    │  │ ┌───────────────────┐ │  │
+    │  │ │ + Tambah Jobdesc  │ │  │  ← Inline input + tombol tambah
+    │  │ └───────────────────┘ │  │     (muncul input field saat diklik)
+    │  │                       │  │
+    │  └───────────────────────┘  │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │       💾 Simpan       │  │  ← Tombol full-width
+    │  └───────────────────────┘  │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │    🚪 Keluar / Logout │  │  ← Tombol outline merah, di paling bawah
+    │  └───────────────────────┘  │
+    └─────────────────────────────┘
+
+  Komponen:
+    ProfileSetupPage
+      ├── AvatarUpload
+      │     └── ImageCropModal (opsional: cropping sebelum upload)
+      ├── ProfileForm (Nama, Jabatan)
+      ├── JobdescBuilder
+      │     ├── JobdescList
+      │     │     └── JobdescItem[]  (teks + icon edit + icon delete)
+      │     └── AddJobdescInput   (inline input + tombol Tambah)
+      ├── SaveButton
+      └── LogoutButton
+
+  State:
+    - avatar: File | string | null
+    - fullName: string
+    - position: string
+    - jobdescs: Array<{ id: string; text: string }>
+    - isEditingJobdesc: string | null   (id jobdesc yg sedang diedit)
+    - newJobdescText: string
+    - isSubmitting: boolean
+
+  Interaksi:
+    - Klik "Ubah Foto" → buka file picker atau kamera (mobile: capture)
+    - Klik ✏️ pada jobdesc → teks berubah jadi input inline, bisa edit & save
+    - Klik 🗑️ → konfirmasi hapus (modal konfirmasi kecil: "Hapus jobdesc ini?")
+    - Klik "+ Tambah Jobdesc" → muncul input field baru di bagian bawah list
+
+  Catatan: Jika akses dari /profile/setup (first-time), setelah simpan → redirect
+           ke /dashboard. Jika dari /profile/edit, kembali ke halaman sebelumnya.
+
+═══════════════════════════════════════════════════════════════════════════════
+  SCREEN 3: DASHBOARD / HOME
+═══════════════════════════════════════════════════════════════════════════════
+  Route         : /dashboard
+  Tujuan        : Pusat kendali — lihat statistik, aktivitas terakhir, input laporan
+
+  Layout Visual (Mobile):
+    ┌─────────────────────────────┐
+    │  Halo, Putra 👋             │  ← Header
+    │  IT Support & Infrastructure│  ← text-sm, text-gray-500
+    │                        [🧑] │  ← Avatar, klik → /profile/edit
+    ├─────────────────────────────┤
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │   📊 Analitik Bulan    │  │  ← Hero Section / Card
+    │  │   (Juni 2026)         │  │
+    │  │                       │  │
+    │  │    ╭───────╮          │  │
+    │  │    │ Donut │          │  │  ← Donut Chart (Recharts)
+    │  │    │ Chart │          │  │     3 segment: Hijau, Biru, Oranye
+    │  │    ╰───────╯          │  │
+    │  │                       │  │
+    │  │ 🟢 15 Jobdesc Utama   │  │  ← Legend / label
+    │  │ 🔵  8 Improvement     │  │
+    │  │ 🟠  7 Help User       │  │
+    │  │                       │  │
+    │  │ ┌───────────────────┐ │  │
+    │  │ │   30 Total Tugas  │ │  │  ← Scoreboard angka besar
+    │  │ └───────────────────┘ │  │
+    │  └───────────────────────┘  │
+    │                             │
+    │  Aktivitas Terakhir  Lihat Semua >  ← Judul section + link ke /history
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │ 📅 28 Jun | 🟢 Jobdesc│  │  ← RecentActivityCard (bisa diklik)
+    │  │ Monitoring jaringan   │  │     → klik → /history?id=xxx
+    │  │ kantor pusat          │  │
+    │  └───────────────────────┘  │
+    │  ┌───────────────────────┐  │
+    │  │ 📅 27 Jun | 🔵 Improv.│  │
+    │  │ Migrasi server ke     │  │
+    │  │ TrueNAS               │  │
+    │  └───────────────────────┘  │
+    │  ┌───────────────────────┐  │
+    │  │ 📅 27 Jun | 🟠 Help   │  │
+    │  │ Bantu pengecekan IC   │  │
+    │  │ Power - Bu Rina (Fin.)│  │
+    │  └───────────────────────┘  │
+    │                             │
+    │                         [+] │  ← FAB (Floating Action Button)
+    └─────────────────────────────┘       → klik → /report/new
+
+  Komponen:
+    HomePage
+      ├── DashboardHeader
+      │     ├── GreetingText   (sapaan + jabatan, dinamis dari profile)
+      │     └── AvatarButton   (foto profil, klik → /profile/edit)
+      ├── HeroAnalytics
+      │     ├── MonthSelector  (opsional: panah kiri/kanan ganti bulan)
+      │     ├── DonutChart     (Recharts PieChart, donut=true)
+      │     ├── LegendList     (3 item: warna + label + jumlah)
+      │     └── TotalCounter   (ringkasan angka total)
+      ├── RecentActivities
+      │     ├── SectionHeader  (judul + "Lihat Semua >" link)
+      │     └── RecentActivityCard[]  (max 3, masing-masing clickable)
+      └── FloatingActionButton  (posisi: fixed, bottom-20 right-4)
+
+  State:
+    - userProfile: { name, position, avatar }  (dari authStore)
+    - monthlyStats: { jobdesc: number, improvement: number, helpUser: number, total: number }
+    - recentActivities: Array<ReportSummary>  (max 3 item)
+    - selectedMonth: string (YYYY-MM)
+    - isLoadingStats: boolean
+
+  Interaksi:
+    - Klik Avatar → navigasi ke /profile/edit
+    - Klik "Lihat Semua >" → navigasi ke /history
+    - Klik RecentActivityCard → navigasi ke /history?highlight={reportId}
+    - Klik FAB [+] → navigasi ke /report/new
+
+═══════════════════════════════════════════════════════════════════════════════
+  SCREEN 4: FORM INPUT LAPORAN
+═══════════════════════════════════════════════════════════════════════════════
+  Route         : /report/new
+  Tujuan        : Mencatat laporan pekerjaan harian (inti aplikasi)
+
+  ✨ Ini adalah halaman paling kompleks dengan dynamic fields.
+
+  Layout Visual — STEP 1: Pilih Tanggal
+  ┌─────────────────────────────┐
+  │  ← Batal    Buat Laporan    │  ← Top nav, tombol Batal → goBack()
+  ├─────────────────────────────┤
+  │                             │
+  │  📅 Tanggal Pengerjaan      │
+  │  ┌───────────────────────┐  │
+  │  │  📆  30 Juni 2026    ▼│  │  ← Custom Date Button
+  │  └───────────────────────┘  │     (default: hari ini)
+  │                             │     (bisa mundur maks 7 hari)
+  │  ─────────────────────────  │
+  │                             │
+  │  📂 Kategori Pekerjaan      │
+  │                             │
+  │  ┌───────────────────────┐  │
+  │  │  🟢               🔵  │  │
+  │  │  Jobdesc    Improv.  │  │  ← CategoryCard (2 kolom grid)
+  │  │  Utama      ement    │  │
+  │  └───────────────────────┘  │
+  │  ┌───────────────────────┐  │
+  │  │         🟠            │  │
+  │  │       Help User       │  │  ← 1 card lebar (full width)
+  │  └───────────────────────┘  │
+  │                             │
+  │  [Ketika kategori dipilih,  │
+  │   lanjut ke dynamic fields] │
+  └─────────────────────────────┘
+
+  Layout Visual — STEP 3 (Dynamic Fields — jika pilih [Jobdesc Utama]):
+  ┌─────────────────────────────┐
+  │                             │
+  │  Pilih Jobdesc              │
+  │  ┌───────────────────────┐  │
+  │  │ Monitoring & troubles-│▼ │  ← Dropdown / Select
+  │  │ hooting jaringan      │  │     (berisi daftar dari Profile Setup)
+  │  └───────────────────────┘  │
+  │                             │
+  │  Berdasarkan permintaan     │
+  │  User?               [⚪]   │  ← Toggle Switch (off = gray, on = emerald)
+  │                             │
+  │  [Jika toggle ON, muncul:]  │
+  │  ┌───────────────────────┐  │
+  │  │ Nama User / Dept.    │  │  ← Input field (muncul animasi slide)
+  │  └───────────────────────┘  │
+  │                             │
+  │  Deskripsi Pengerjaan       │
+  │  ┌───────────────────────┐  │
+  │  │                       │  │
+  │  │ (text area, min 3 row)│  │  ← TextArea
+  │  │                       │  │
+  │  └───────────────────────┘  │
+  └─────────────────────────────┘
+
+  Layout Visual — STEP 3 (jika pilih [Improvement]):
+  ┌─────────────────────────────┐
+  │                             │
+  │  Judul Improvement           │
+  │  ┌───────────────────────┐  │
+  │  │ Misal: Membuat rule   │  │  ← Input field bebas
+  │  │ firewall baru         │  │
+  │  └───────────────────────┘  │
+  │                             │
+  │  Deskripsi Improvement       │
+  │  ┌───────────────────────┐  │
+  │  │                       │  │
+  │  │ (text area)           │  │  ← TextArea
+  │  │                       │  │
+  │  └───────────────────────┘  │
+  └─────────────────────────────┘
+
+  Layout Visual — STEP 3 (jika pilih [Help User]):
+  ┌─────────────────────────────┐
+  │                             │
+  │  Nama User / Departemen *   │  ← Required, ditandai *
+  │  ┌───────────────────────┐  │
+  │  │ Misal: Pak Budi (Fin) │  │  ← Input field, wajib diisi
+  │  └───────────────────────┘  │
+  │                             │
+  │  Deskripsi Bantuan          │
+  │  ┌───────────────────────┐  │
+  │  │                       │  │
+  │  │ (text area)           │  │  ← TextArea
+  │  │                       │  │
+  │  └───────────────────────┘  │
+  └─────────────────────────────┘
+
+  Layout Visual — STEP 4: Bukti & Submit (muncul setelah kategori dipilih)
+  ┌─────────────────────────────┐
+  │  📎 Bukti / Evidence        │
+  │                             │
+  │  ┌──────────┐ ┌──────────┐  │
+  │  │ 📷       │ │ 📄       │  │  ← Preview thumbnails (jika ada)
+  │  │ gambar1  │ │ gambar2  │  │
+  │  └──────────┘ └──────────┘  │
+  │                             │
+  │  ┌───────────────────────┐  │
+  │  │  📷  + Tambah Foto    │  │  ← AttachmentButton
+  │  └───────────────────────┘  │     (klik → buka file picker / kamera)
+  │                             │
+  │  ─────────────────────────  │
+  │                             │
+  │  ┌───────────────────────┐  │
+  │  │    ✅ Submit Laporan   │  │  ← Tombol full-width, emerald-500
+  │  └───────────────────────┘  │     disabled jika form belum valid
+  └─────────────────────────────┘
+
+  Komponen:
+    ReportFormPage
+      ├── DatePickerButton       (tanggal, default today, max mundur 7 hari)
+      ├── CategoryPicker
+      │     └── CategoryCard[]   (3 card: Jobdesc / Improvement / Help User)
+      ├── DynamicFields          (render berdasarkan selectedCategory)
+      │     ├── JobdescFields
+      │     │     ├── JobdescSelect      (dropdown)
+      │     │     ├── ToggleSwitch       ("Berdasarkan permintaan User?")
+      │     │     ├── UserNameInput      (conditional, muncul jika toggle ON)
+      │     │     └── DescriptionTextarea
+      │     ├── ImprovementFields
+      │     │     ├── TitleInput         (input bebas)
+      │     │     └── DescriptionTextarea
+      │     └── HelpUserFields
+      │           ├── UserNameInput      (required)
+      │           └── DescriptionTextarea
+      ├── EvidenceUploader
+      │     ├── FilePreviewGrid  (grid 3 kolom thumbnail)
+      │     ├── AddFileButton
+      │     └── RemoveFileButton (ikon ✕ di pojok thumbnail)
+      └── SubmitButton           (full-width, sticky bottom)
+
+  State:
+    - date: Date                    (default: new Date())
+    - category: 'jobdesc' | 'improvement' | 'helpUser' | null
+    - jobdescId: string | null
+    - isUserRequested: boolean      (hanya untuk jobdesc)
+    - userName: string
+    - title: string                 (hanya untuk improvement)
+    - description: string
+    - evidence: File[]              (max 5 files, max 5MB each)
+    - evidencePreviews: string[]    (URL.createObjectURL utk preview)
+    - isSubmitting: boolean
+
+  Validasi per kategori:
+    Jobdesc   : jobdescId wajib; jika toggle ON → userName wajib; description wajib
+    Improv.   : title wajib; description wajib
+    Help User : userName wajib; description wajib
+
+  Setelah submit sukses → toast "✅ Laporan berhasil disimpan!" → redirect ke /dashboard
+
+═══════════════════════════════════════════════════════════════════════════════
+  SCREEN 5: HISTORY & EXPORT
+═══════════════════════════════════════════════════════════════════════════════
+  Route         : /history
+  Tujuan        : Melihat seluruh riwayat laporan, search, filter, export Excel
+
+  Layout Visual (Mobile):
+    ┌─────────────────────────────┐
+    │  Riwayat Laporan            │  ← Header
+    ├─────────────────────────────┤
+    │  ┌───────────────────────┐  │
+    │  │ 🔍 Cari nama user     │  │  ← Search Bar (sticky)
+    │  │    atau pekerjaan...  │  │     dengan icon search di kiri
+    │  └───────────────────────┘  │
+    │                             │
+    │  [ 📅 Filter ] [ 📥 Download ]  ← Action Row: 2 tombol
+    │                             │
+    │  [Jika filter aktif:]       │
+    │  ┌───────────────────────┐  │
+    │  │ 📅 1 Jun - 30 Jun  ✕  │  │  ← Active Filter Chip (bisa di-close)
+    │  └───────────────────────┘  │
+    │                             │
+    │  ──── 30 Juni 2026 ────     │  ← Date Separator
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │ 28 Jun 2026    🟢 Jobdesc│  ← TimelineCard
+    │  │ Monitoring jaringan   │  │
+    │  │ kantor pusat          │  │
+    │  │                       │  │
+    │  │ [🖼️] thumbnail kecil   │  │  ← Evidence thumbnail (jika ada)
+    │  └───────────────────────┘  │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │ 27 Jun 2026    🔵 Improv│
+    │  │ Migrasi server ke     │  │
+    │  │ TrueNAS               │  │
+    │  └───────────────────────┘  │
+    │                             │
+    │  ──── 26 Juni 2026 ────     │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │ 26 Jun 2026    🟠 Help │
+    │  │ Bantu pengecekan IC   │  │
+    │  │ Power laptop          │  │
+    │  │ 👤 Bu Rina (Finance)  │  │  ← Nama user/departemen
+    │  └───────────────────────┘  │
+    │                             │
+    │        [Load More...]       │  ← Infinite scroll / pagination
+    │                             │
+    │                         [+] │  ← FAB (tetap ada)
+    └─────────────────────────────┘
+
+  Layout filter modal/sheet (saat tombol Filter diklik):
+    ┌─────────────────────────────┐
+    │  ✕     Filter Laporan       │
+    ├─────────────────────────────┤
+    │                             │
+    │  Tanggal Mulai              │
+    │  ┌───────────────────────┐  │
+    │  │ 📆  Pilih tanggal    ▼│  │
+    │  └───────────────────────┘  │
+    │                             │
+    │  Tanggal Akhir              │
+    │  ┌───────────────────────┐  │
+    │  │ 📆  Pilih tanggal    ▼│  │
+    │  └───────────────────────┘  │
+    │                             │
+    │  Kategori                   │
+    │  ┌──────┐ ┌──────┐ ┌──────┐│
+    │  │Semua│ │ 🟢   │ │ 🔵   ││  ← Chip/toggle filter
+    │  └──────┘ └──────┘ └──────┘│
+    │  ┌──────┐                  │
+    │  │ 🟠   │                  │
+    │  └──────┘                  │
+    │                             │
+    │  ┌───────────────────────┐  │
+    │  │     Terapkan Filter   │  │
+    │  └───────────────────────┘  │
+    └─────────────────────────────┘
+
+  Komponen:
+    HistoryPage
+      ├── SearchBar               (input text + icon search, debounced)
+      ├── ActionRow
+      │     ├── FilterButton      (ikon + teks "Filter", klik → buka FilterSheet)
+      │     └── ExportButton      (ikon Excel + teks "Download", hijau)
+      ├── ActiveFilterChip        (conditional, tampil jika filter aktif)
+      ├── TimelineList
+      │     ├── DateSeparator[]   (pemisah per tanggal)
+      │     ├── TimelineCard[]    (clickable, expand detail?)
+      │     │     ├── DateBadge
+      │     │     ├── CategoryTag  (warna sesuai kategori)
+      │     │     ├── TitleText
+      │     │     ├── UserBadge    (conditional, jika Help User / ada userName)
+      │     │     └── EvidenceThumbnail (conditional)
+      │     └── LoadMoreTrigger   (infinite scroll)
+      ├── FilterSheet / FilterModal
+      │     ├── DateRangePicker   (start + end)
+      │     ├── CategoryChips     (multi-select, default: Semua)
+      │     └── ApplyButton
+      └── FloatingActionButton
+
+  State:
+    - searchQuery: string
+    - dateRange: { start: Date | null; end: Date | null }
+    - categoryFilter: 'all' | 'jobdesc' | 'improvement' | 'helpUser'
+    - reports: Array<Report>
+    - page: number                 (untuk pagination)
+    - hasMore: boolean
+    - isLoading: boolean
+    - highlightedReportId: string | null   (dari deep link Dashboard)
+
+  Interaksi:
+    - Search bar → filter reports secara lokal (client-side) dengan debounce 300ms
+    - Klik FilterButton → buka bottom sheet (mobile) atau modal (desktop)
+    - Klik ExportButton → generate & download .xlsx (menggunakan SheetJS/xlsx)
+    - Klik TimelineCard → expand detail (opsional: inline expand atau modal detail)
+    - Scroll ke bawah → infinite scroll (load more)
+    - Jika ada `highlightedReportId` → auto-scroll ke card tersebut + highlight animasi
+
+  Format Export Excel (.xlsx):
+    | Tanggal    | Kategori        | Pekerjaan              | Nama User       | Deskripsi                    |
+    |------------|-----------------|------------------------|-----------------|------------------------------|
+    | 28/06/2026 | Jobdesc Utama   | Monitoring jaringan    | -               | Monitoring jaringan kantor.. |
+    | 27/06/2026 | Improvement     | Rule firewall baru     | -               | Membuat rule firewall di..   |
+    | 26/06/2026 | Help User       | Bantu pengecekan IC    | Bu Rina (Fin.)  | Membantu pengecekan IC Power |
+
+================================================================================
+
+🗂️ 5. ROUTING MAP (React Router v6)
+--------------------------------------------------------------------------------
+  Path                      Halaman              Auth Required   Notes
+  ───────────────────────────────────────────────────────────────────────────
+  /login                    LoginPage            No              Redirect ke /dashboard jika sudah login
+  /register                 RegisterPage         No
+  /dashboard                HomePage             Yes             Halaman utama
+  /profile/setup            ProfileSetupPage     Yes             First-time setup (jika profil belum lengkap)
+  /profile/edit             ProfileEditPage      Yes             Edit profil + jobdesc
+  /report/new               ReportFormPage       Yes             Form input laporan baru
+  /history                  HistoryPage          Yes             Riwayat + export
+  /history?highlight={id}   HistoryPage          Yes             Deep link dari Dashboard
+  * (404)                   NotFoundPage         -               Fallback route
+
+  Auth Guard Logic:
+    - Cek token/ session di authStore
+    - Jika belum login → redirect ke /login
+    - Jika sudah login tapi profil belum lengkap → redirect ke /profile/setup
+    - Jika sudah login + profil lengkap → izinkan akses
+
+================================================================================
+
+🧩 6. SHARED COMPONENTS LIBRARY
+--------------------------------------------------------------------------------
+  Semua komponen shared di folder src/components/:
+
+  Component              Props / Deskripsi
+  ───────────────────────────────────────────────────────────────────────────
+  AppLogo                size ('sm'|'md'|'lg') → Logo + judul app
+  Button                 variant ('primary'|'secondary'|'outline'|'danger'|'ghost'),
+                         size ('sm'|'md'|'lg'), fullWidth, loading, disabled
+  Input                  label, error, hint, type, icon (kiri), iconRight
+  TextArea               label, error, rows (default 4)
+  Select / Dropdown      label, options, placeholder, error
+  ToggleSwitch           label, checked, onChange
+  DatePickerButton       value, onChange, minDate, maxDate, format
+  Card                   children, className (wrapper: rounded-xl shadow-sm border)
+  Avatar                 src, size ('sm'|'md'|'lg'|'xl'), onClick
+  Badge / Tag            color ('emerald'|'blue'|'amber'|'gray'), children
+  Divider                text (opsional: teks di tengah seperti "atau")
+  FAB                    onClick, icon (default: Plus)
+  BottomNav              items: [{ icon, label, path, active }]
+  Sidebar                items, userProfile
+  Modal / BottomSheet    isOpen, onClose, title, children
+  EmptyState             icon, title, description, action (tombol opsional)
+  Skeleton / Loading     variant ('card'|'chart'|'text'|'avatar')
+  Toast (Sonner)         toast.success(), toast.error() — global
+  ConfirmDialog          isOpen, title, message, onConfirm, onCancel
+  FilePreview            files[], onRemove, maxFiles
+
+================================================================================
+
+📊 7. STATE MANAGEMENT (Zustand Stores)
+--------------------------------------------------------------------------------
+
+  authStore:
+    user: { id, name, email, position, avatar } | null
+    isAuthenticated: boolean
+    isProfileComplete: boolean       (cek apakah name & position sudah diisi)
+    login(email, password): Promise
+    loginWithGoogle(): Promise
+    register(name, email, password): Promise
+    logout(): void
+    updateProfile(data): Promise
+
+  jobdescStore:
+    items: Array<{ id, text, createdAt }>
+    isLoading: boolean
+    fetchJobdescs(): Promise
+    addJobdesc(text): Promise
+    updateJobdesc(id, text): Promise
+    deleteJobdesc(id): Promise
+
+  reportStore:
+    reports: Array<Report>
+    monthlyStats: { jobdesc, improvement, helpUser, total }
+    recentActivities: Array<ReportSummary>
+    isLoading: boolean
+    filters: { search, dateRange, category }
+    fetchReports(filters?): Promise
+    fetchMonthlyStats(month): Promise
+    fetchRecentActivities(): Promise
+    submitReport(data): Promise
+    setFilters(filters): void
+    clearFilters(): void
+
+  uiStore:
+    activeModal: string | null
+    toastMessage: { type, message } | null
+    openModal(name): void
+    closeModal(): void
+
+================================================================================
+
+📱 8. RESPONSIVE BREAKPOINTS (Tailwind)
+--------------------------------------------------------------------------------
+  sm   : 640px   → (default mobile-first, tidak perlu prefix)
+  md   : 768px   → BottomNav berubah jadi Sidebar
+  lg   : 1024px  → Konten max-width, grid 2 kolom (form)
+  xl   : 1280px  → Konten max-w-5xl
+
+  Pola Responsive:
+    Mobile (< 768px)           Desktop (≥ 768px)
+    ─────────────────────────────────────────────
+    Bottom Navigation Bar   →  Sidebar (kiri, fixed, w-64)
+    Stack vertikal          →  Grid horizontal (untuk CategoryPicker)
+    Full-width cards        →  max-w-4xl, centered, 2-kolom grid
+    Filter BottomSheet      →  Filter Modal / Sidebar Panel
+    DatePicker inline       →  DatePicker Popover / Dropdown
+
+================================================================================
+
+🎬 9. MICRO-INTERACTIONS & ANIMATIONS
+--------------------------------------------------------------------------------
+  Transisi Halaman    : Gunakan framer-motion — AnimatePresence + slide/fade
+  Toggle Switch       : Animasi smooth (transition-colors duration-200)
+  Category Card       : Scale on hover (hover:scale-[1.02]), ring saat selected
+  Dynamic Fields      : Animate height (framer-motion: animate={{ height: 'auto' }})
+  FAB                 : Pulse animation saat halaman pertama kali load (sekali)
+  Toast (Sonner)      : Slide-in dari atas (mobile) / kanan bawah (desktop)
+  Loading Skeleton    : Pulse animation (animate-pulse Tailwind)
+  Empty State         : Fade-in icon + text
+  Confirm Dialog      : Scale-in dari tengah
+  Filter Sheet        : Slide-up dari bawah (mobile), fade-in (desktop)
+  Card Click (Ripple) : Efek ripple on click (mobile), shadow-lifting (desktop)
+
+================================================================================
+
+📋 10. UI STATES HANDLING (Setiap Halaman Wajib Menangani)
+--------------------------------------------------------------------------------
+
+  State             Tampilan
+  ───────────────────────────────────────────────────────────────────────────
+  Loading           Skeleton loader / spinner (jangan blank screen!)
+  Empty             EmptyState component (ikon + pesan + CTA)
+  Error             Alert/Toast + retry button
+  Success           Toast hijau + redirect (untuk form submit)
+  Offline           Banner kuning di atas: "Kamu sedang offline"
+  Not Found (404)   Halaman 404 lucu dengan ilustrasi + tombol "Kembali"
+
+================================================================================
+
+🚀 11. IMPLEMENTATION ORDER (Rekomendasi Bertahap)
+--------------------------------------------------------------------------------
+  Phase 1 — Foundation:
+    1. Inisialisasi project (Vite + React + Tailwind)
+    2. Setup routing + Auth Guard
+    3. Design system (colors, typography, shadows di tailwind.config)
+    4. Shared components (Button, Input, Card, Avatar, Badge, FAB)
+    5. BottomNav + Sidebar + Layout wrapper
+    6. Zustand stores (auth, jobdesc, report, ui)
+
+  Phase 2 — Auth & Profile:
+    7. LoginPage + RegisterPage (UI only dulu)
+    8. ProfileSetupPage + EditProfilePage
+    9. JobdescBuilder (CRUD jobdesc)
+    10. AvatarUpload + ImagePreview
+
+  Phase 3 — Core Features:
+    11. Dashboard / HomePage + HeroAnalytics (DonutChart)
+    12. RecentActivities + link ke History
+    13. ReportFormPage (DatePicker + CategoryPicker + DynamicFields)
+    14. EvidenceUploader (file picker + preview + remove)
+
+  Phase 4 — History & Export:
+    15. HistoryPage (TimelineList + TimelineCard)
+    16. SearchBar + FilterSheet/Modal
+    17. ExportButton + Excel generation (SheetJS)
+
+  Phase 5 — Polish:
+    18. Animations (framer-motion)
+    19. PWA setup (vite-plugin-pwa)
+    20. Empty states, error states, loading skeletons
+    21. Testing & bug fixing
+
+================================================================================
+                            END OF UI PLAN
+================================================================================
