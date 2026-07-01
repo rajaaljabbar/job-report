@@ -1,57 +1,73 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useJobdescStore from '../../stores/jobdescStore';
 import useReportStore from '../../stores/reportStore';
 import { uploadToCloudinary } from '../../lib/cloudinary';
+import { isHoliday } from '../../lib/holidays';
 
-const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const dayHeaders = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 
-function getWeekDates(weekOffset = 0) {
-  const today = new Date();
-  const day = today.getDay();
-  // Monday of current week
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
-  // Apply week offset
-  monday.setDate(monday.getDate() + weekOffset * 7);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
-}
+const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
-// Max weeks we can go back (within same month)
-function getMaxPastWeeks() {
-  const today = new Date();
-  const day = today.getDay();
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - (day === 0 ? 6 : day - 1));
+function getMonthDays(year, month) {
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const days = [];
 
-  // First day of current month
-  const firstOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-  let weeks = 0;
-  const check = new Date(monday);
-  while (check > firstOfMonth) {
-    check.setDate(check.getDate() - 7);
-    if (check >= firstOfMonth) weeks++;
+  // Add empty slots for days before the 1st
+  const startDow = firstDay.getDay(); // 0=Sun
+  for (let i = 0; i < startDow; i++) {
+    days.push(null);
   }
-  return weeks;
+
+  // Add all days in month
+  for (let d = 1; d <= lastDay.getDate(); d++) {
+    days.push(new Date(year, month, d));
+  }
+
+  return days;
 }
 
 export default function ReportFormPage() {
   const navigate = useNavigate();
-  const { items: jobdescs } = useJobdescStore();
+  const { items: jobdescs, fetchJobdescs } = useJobdescStore();
   const submitReport = useReportStore((s) => s.submitReport);
   const addEvidence = useReportStore((s) => s.addEvidence);
 
-  const maxPastWeeks = getMaxPastWeeks();
-  const [weekOffset, setWeekOffset] = useState(0);
+  // Fetch jobdescs on mount so the dropdown is always populated
+  useEffect(() => {
+    fetchJobdescs();
+  }, []);
 
-  const weekDates = getWeekDates(weekOffset);
   const today = new Date();
   const todayStr = today.toDateString();
+
+  // Month navigation for date picker (up to 6 months back)
+  const [pickerYear, setPickerYear] = useState(today.getFullYear());
+  const [pickerMonth, setPickerMonth] = useState(today.getMonth());
+  const isPickerCurrentMonth = pickerYear === today.getFullYear() && pickerMonth === today.getMonth();
+  const maxPastMonth = (today.getFullYear() - pickerYear) * 12 + (today.getMonth() - pickerMonth) >= 6;
+
+  const monthDays = getMonthDays(pickerYear, pickerMonth);
+
+  const goToPrevPickerMonth = () => {
+    if (pickerMonth === 0) {
+      setPickerMonth(11);
+      setPickerYear((y) => y - 1);
+    } else {
+      setPickerMonth((m) => m - 1);
+    }
+  };
+
+  const goToNextPickerMonth = () => {
+    if (isPickerCurrentMonth) return;
+    if (pickerMonth === 11) {
+      setPickerMonth(0);
+      setPickerYear((y) => y + 1);
+    } else {
+      setPickerMonth((m) => m + 1);
+    }
+  };
 
   const [selectedDate, setSelectedDate] = useState(today);
   const [category, setCategory] = useState('jobdesc');
@@ -63,6 +79,19 @@ export default function ReportFormPage() {
   const [evidence, setEvidence] = useState([]);
   const [evidencePreviews, setEvidencePreviews] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleFileAdd = (e) => {
     const files = Array.from(e.target.files);
@@ -105,9 +134,12 @@ export default function ReportFormPage() {
       }
 
       // 2. Create report in Supabase
+      const y = selectedDate.getFullYear();
+      const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+      const d = String(selectedDate.getDate()).padStart(2, '0');
       const reportData = {
         category,
-        dateWorked: selectedDate.toISOString().split('T')[0],
+        dateWorked: `${y}-${m}-${d}`,
         title:
           category === 'improvement'
             ? title
@@ -177,46 +209,67 @@ export default function ReportFormPage() {
               <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setWeekOffset((w) => Math.max(w - 1, -maxPastWeeks))}
-                  disabled={weekOffset <= -maxPastWeeks}
+                  onClick={goToPrevPickerMonth}
+                  disabled={maxPastMonth}
                   className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <span className="material-symbols-outlined text-xl">chevron_left</span>
                 </button>
+                <span className="text-xs font-semibold text-on-surface min-w-[110px] text-center">
+                  {monthNames[pickerMonth]} {pickerYear}
+                </span>
                 <button
                   type="button"
-                  onClick={() => setWeekOffset((w) => Math.min(w + 1, 0))}
-                  disabled={weekOffset >= 0}
+                  onClick={goToNextPickerMonth}
+                  disabled={isPickerCurrentMonth}
                   className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <span className="material-symbols-outlined text-xl">chevron_right</span>
                 </button>
               </div>
             </div>
-            <div className="flex overflow-x-auto gap-2 md:grid md:grid-cols-7 pb-2">
-              {weekDates.map((d) => {
+
+            {/* Day Headers */}
+            <div className="grid grid-cols-7 gap-0.5 text-center">
+              {dayHeaders.map((dh) => (
+                <span key={dh} className={`w-8 h-8 md:w-9 md:h-9 flex items-center justify-center text-[10px] font-semibold ${dh === 'Min' || dh === 'Sab' ? 'text-red-400' : 'text-on-surface-variant/60'}`}>{dh}</span>
+              ))}
+            </div>
+
+            {/* Day Grid */}
+            <div className="grid grid-cols-7 gap-0.5">
+              {monthDays.map((d, idx) => {
+                if (!d) {
+                  return <div key={`empty-${idx}`} className="w-8 h-8 md:w-9 md:h-9" />;
+                }
                 const dateStr = d.toDateString();
                 const isToday = dateStr === todayStr;
                 const isSelected = dateStr === selectedDate.toDateString();
-                const isPast = d > today;
+                const isFuture = d > today;
+                const dow = d.getDay();
+                const isWeekend = dow === 0 || dow === 6;
+                const isLibur = isHoliday(d) && !isWeekend;
                 return (
                   <button
                     key={dateStr}
                     type="button"
-                    disabled={isPast}
+                    disabled={isFuture}
                     onClick={() => setSelectedDate(d)}
-                    className={`snap-center shrink-0 w-[60px] md:w-auto flex flex-col items-center justify-center py-2 rounded-lg border transition-colors ${
+                    className={`w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-md border transition-colors text-center ${
                       isSelected
                         ? 'bg-primary text-on-primary border-primary shadow-sm'
-                        : isPast
-                        ? 'border-surface-variant text-on-surface-variant opacity-50 cursor-not-allowed'
-                        : 'border-surface-variant text-on-surface cursor-pointer hover:bg-surface-container-low'
+                        : isFuture
+                        ? 'border-transparent text-on-surface-variant/30 cursor-not-allowed'
+                        : isLibur
+                        ? 'border-transparent text-red-500 bg-red-50 hover:bg-red-100'
+                        : isWeekend
+                        ? 'border-transparent text-red-300 bg-red-50/30 hover:bg-red-50'
+                        : isToday
+                        ? 'border-primary text-primary bg-primary-container/10'
+                        : 'border-transparent text-on-surface hover:bg-surface-container-low'
                     }`}
                   >
-                    <span className={`text-sm ${isSelected ? 'opacity-90' : 'text-on-surface-variant'}`}>
-                      {days[d.getDay() === 0 ? 6 : d.getDay() - 1]}
-                    </span>
-                    <span className="text-lg font-semibold mt-1">{d.getDate()}</span>
+                    <span className="text-sm font-semibold leading-none">{d.getDate()}</span>
                   </button>
                 );
               })}
@@ -267,18 +320,40 @@ export default function ReportFormPage() {
           {category === 'jobdesc' && (
             <>
               <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-on-surface-variant" htmlFor="jobdesc-select">Specific Task / Jobdesc</label>
-                <div className="relative">
-                  <select
-                    id="jobdesc-select" value={jobdescId} onChange={(e) => setJobdescId(e.target.value)}
-                    className="w-full appearance-none bg-background border border-outline-variant text-on-surface text-base rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary transition-shadow"
+                <label className="text-xs font-semibold text-on-surface-variant">Specific Task / Jobdesc</label>
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setDropdownOpen(!dropdownOpen)}
+                    className="w-full flex items-center justify-between bg-background border border-outline-variant text-on-surface text-base rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary transition-shadow text-left"
                   >
-                    <option value="">Select specific task...</option>
-                    {jobdescs.map((j) => (
-                      <option key={j.id} value={j.id}>{j.text}</option>
-                    ))}
-                  </select>
-                  <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+                    <span className={jobdescId ? 'text-on-surface' : 'text-on-surface-variant/50'}>
+                      {jobdescId ? jobdescs.find((j) => j.id === jobdescId)?.text || 'Select specific task...' : 'Select specific task...'}
+                    </span>
+                    <span className={`material-symbols-outlined text-xl text-on-surface-variant transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}>
+                      expand_more
+                    </span>
+                  </button>
+                  {dropdownOpen && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-surface-container-lowest border border-surface-variant rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {jobdescs.length === 0 ? (
+                        <p className="px-4 py-3 text-sm text-on-surface-variant">Belum ada jobdesc. Tambahkan di halaman Profile.</p>
+                      ) : (
+                        jobdescs.map((j) => (
+                          <button
+                            key={j.id}
+                            type="button"
+                            onClick={() => { setJobdescId(j.id); setDropdownOpen(false); }}
+                            className={`w-full text-left px-4 py-3 text-base hover:bg-surface-container transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                              jobdescId === j.id ? 'bg-primary-container/10 text-primary font-semibold' : 'text-on-surface'
+                            }`}
+                          >
+                            {j.text}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 

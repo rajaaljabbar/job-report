@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import useReportStore from '../../stores/reportStore';
 
@@ -9,7 +9,7 @@ const categoryMap = {
 };
 
 export default function HistoryPage() {
-  const { allReports, fetchReports, setFilters, clearFilters } = useReportStore();
+  const { allReports, fetchReports, setFilters, clearFilters, deleteReport } = useReportStore();
   const [searchParams] = useSearchParams();
   const highlightId = searchParams.get('highlight');
 
@@ -19,6 +19,10 @@ export default function HistoryPage() {
   const [dateTo, setDateTo] = useState('');
   const [catFilter, setCatFilter] = useState('all');
   const [activeFilters, setActiveFilters] = useState(false);
+  const [swipedId, setSwipedId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [toast, setToast] = useState(null); // { message: string, type: 'success'|'error' }
+  const swipeStart = useRef(0);
 
   // Fetch on mount
   useEffect(() => {
@@ -41,6 +45,64 @@ export default function HistoryPage() {
     clearFilters();
     setFilterOpen(false);
     fetchReports();
+  };
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleDelete = async (reportId) => {
+    setDeletingId(reportId);
+    await new Promise((r) => setTimeout(r, 300)); // wait for exit animation
+    try {
+      await deleteReport(reportId);
+      showToast('✅ Laporan berhasil dihapus');
+    } catch (err) {
+      console.error('Delete failed:', err);
+      showToast('❌ Gagal menghapus laporan', 'error');
+    }
+    setDeletingId(null);
+    setSwipedId(null);
+  };
+
+  // Touch swipe handlers
+  const handleTouchStart = useCallback((reportId, e) => {
+    swipeStart.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback((reportId, e) => {
+    const diff = swipeStart.current - e.changedTouches[0].clientX;
+    if (diff > 60) {
+      setSwipedId(reportId); // swipe left → reveal delete
+    } else if (diff < -30) {
+      setSwipedId(null); // swipe right → hide delete
+    }
+  }, []);
+
+  const toggleSwipe = (reportId) => {
+    setSwipedId((prev) => (prev === reportId ? null : reportId));
+  };
+
+  const handleExport = () => {
+    const rows = filteredReports.map((r) => {
+      const cat = categoryMap[r.category]?.label || r.category;
+      const date = new Date(r.date_worked).toLocaleDateString('id-ID');
+      return [date, cat, r.title, r.description, r.user_name || '-'];
+    });
+    // CSV header
+    const header = ['Tanggal', 'Kategori', 'Judul', 'Deskripsi', 'User'];
+    const csv = [header, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `laporan-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const filteredReports = useMemo(() => {
@@ -86,6 +148,7 @@ export default function HistoryPage() {
               <span className="material-symbols-outlined text-xl">filter_list</span> Filter
             </button>
             <button
+              onClick={handleExport}
               className="h-10 px-4 rounded-lg bg-primary text-on-primary hover:bg-surface-tint flex items-center gap-2 text-xs font-semibold transition-colors whitespace-nowrap shadow-sm">
               <span className="material-symbols-outlined text-xl">download</span> Download
             </button>
@@ -121,6 +184,8 @@ export default function HistoryPage() {
               {reports.map((report) => {
                 const cat = categoryMap[report.category] || categoryMap.jobdesc;
                 const isHighlighted = highlightId === report.id;
+                const isSwiped = swipedId === report.id;
+                const isDeleting = deletingId === report.id;
                 const evidenceCount = report.report_evidence?.length || 0;
                 const firstEvidence = evidenceCount > 0 ? report.report_evidence[0] : null;
                 const timeStr = report.created_at
@@ -130,35 +195,76 @@ export default function HistoryPage() {
                   <div
                     key={report.id}
                     id={isHighlighted ? `report-${report.id}` : undefined}
-                    className={`relative flex gap-4 w-full group ${isHighlighted ? 'ring-2 ring-primary rounded-xl' : ''}`}
+                    className={`relative ${isDeleting ? 'animate-out fade-out slide-out-to-right fill-mode-forwards' : ''}`}
+                    style={{ animationDuration: '250ms' }}
                   >
-                    {/* Timeline Dot */}
-                    <div className="mt-4 w-10 md:w-12 flex justify-center relative z-10">
-                      <div className={`w-[14px] h-[14px] rounded-full ${cat.dot} border-2 border-background ring-4 ring-background group-hover:scale-125 transition-transform`} />
+                    {/* Hidden delete background */}
+                    <div
+                      className={`absolute inset-y-0 right-0 w-[80px] bg-error rounded-xl flex items-center justify-center gap-1 transition-opacity duration-200 ${
+                        isSwiped ? 'opacity-100' : 'opacity-0 pointer-events-none'
+                      }`}
+                    >
+                      <button
+                        onClick={() => handleDelete(report.id)}
+                        className="flex flex-col items-center gap-0.5 text-white p-2"
+                      >
+                        <span className="material-symbols-outlined text-2xl">delete</span>
+                        <span className="text-[10px] font-semibold">Delete</span>
+                      </button>
                     </div>
 
-                    {/* Card */}
-                    <div className="flex-1 bg-surface-container-lowest border border-surface-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 hover:shadow-md transition-shadow relative overflow-hidden">
-                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${cat.dot}`} />
-                      <div className="flex-1 flex flex-col justify-between">
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className={`text-xs font-semibold ${cat.text} px-2 py-0.5 rounded ${cat.bg}`}>{cat.label}</span>
-                            {timeStr && <span className="text-sm text-on-surface-variant">{timeStr}</span>}
-                          </div>
-                          <h4 className="text-lg font-semibold text-on-surface mb-2">{report.title}</h4>
-                          <p className="text-sm text-on-surface-variant line-clamp-2 mb-3">{report.description}</p>
-                        </div>
-                        <div className="flex items-center gap-2 mt-auto">
-                          <span className="material-symbols-outlined text-outline text-base">person</span>
-                          <span className="text-xs font-semibold text-on-surface">{report.user_name || '-'}</span>
-                        </div>
+                    {/* Card wrapper with slide */}
+                    <div
+                      className={`relative flex gap-4 w-full group transition-transform duration-300 ease-out ${
+                        isHighlighted ? 'ring-2 ring-primary rounded-xl' : ''
+                      }`}
+                      style={{ transform: isSwiped ? 'translateX(-80px)' : 'translateX(0)' }}
+                      onTouchStart={(e) => handleTouchStart(report.id, e)}
+                      onTouchEnd={(e) => handleTouchEnd(report.id, e)}
+                    >
+                      {/* Timeline Dot */}
+                      <div className="mt-4 w-10 md:w-12 flex justify-center relative z-10 flex-shrink-0">
+                        <div className={`w-[14px] h-[14px] rounded-full ${cat.dot} border-2 border-background ring-4 ring-background group-hover:scale-125 transition-transform`} />
                       </div>
-                      {firstEvidence && (
-                        <div className="w-full md:w-32 h-24 md:h-auto rounded-lg overflow-hidden shrink-0 border border-outline-variant">
-                          <img src={firstEvidence.file_url} alt="Evidence" className="w-full h-full object-cover" />
+
+                      {/* Card */}
+                      <div className="flex-1 bg-surface-container-lowest border border-surface-variant rounded-xl p-4 shadow-sm flex flex-col md:flex-row gap-4 hover:shadow-md transition-shadow relative overflow-hidden">
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${cat.dot}`} />
+                        <div className="flex-1 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-semibold ${cat.text} px-2 py-0.5 rounded ${cat.bg}`}>{cat.label}</span>
+                              <div className="flex items-center gap-2">
+                                {timeStr && <span className="text-sm text-on-surface-variant">{timeStr}</span>}
+                                {/* Desktop delete trigger */}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); toggleSwipe(report.id); }}
+                                  className={`hidden md:flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
+                                    isSwiped ? 'bg-error/10 text-error' : 'text-on-surface-variant/30 hover:text-error hover:bg-error/5'
+                                  }`}
+                                >
+                                  <span className="material-symbols-outlined text-lg">delete</span>
+                                </button>
+                              </div>
+                            </div>
+                            <h4 className="text-lg font-semibold text-on-surface mb-2">{report.title}</h4>
+                            <p className="text-sm text-on-surface-variant line-clamp-2 mb-3">{report.description}</p>
+                          </div>
+                          <div className="flex items-center gap-2 mt-auto">
+                            <span className="material-symbols-outlined text-outline text-base">person</span>
+                            <span className="text-xs font-semibold text-on-surface">{report.user_name || '-'}</span>
+                            {/* Mobile swipe hint */}
+                            <span className="md:hidden ml-auto text-[10px] text-on-surface-variant/40 italic">
+                              ← swipe to delete
+                            </span>
+                          </div>
                         </div>
-                      )}
+                        {firstEvidence && (
+                          <div className="w-full md:w-32 h-24 md:h-auto rounded-lg overflow-hidden shrink-0 border border-outline-variant">
+                            <img src={firstEvidence.file_url} alt="Evidence" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -228,6 +334,21 @@ export default function HistoryPage() {
                 className="h-10 px-6 rounded-lg bg-primary text-on-primary hover:bg-surface-tint text-xs font-semibold transition-colors shadow-sm">Apply Filters</button>
             </div>
           </div>
+        </div>
+      )}
+      {/* Toast Notification */}
+      {toast && (
+        <div
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-xl shadow-lg text-sm font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-bottom-4 transition-all duration-300 ${
+            toast.type === 'error'
+              ? 'bg-error text-on-error'
+              : 'bg-primary text-on-primary'
+          }`}
+        >
+          <span className="material-symbols-outlined text-lg">
+            {toast.type === 'error' ? 'error' : 'check_circle'}
+          </span>
+          {toast.message}
         </div>
       )}
     </div>

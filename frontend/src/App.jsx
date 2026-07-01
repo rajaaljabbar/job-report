@@ -7,6 +7,8 @@ import ProfileSetupPage from './features/profile/ProfileSetupPage';
 import HomePage from './features/dashboard/HomePage';
 import ReportFormPage from './features/report/ReportFormPage';
 import HistoryPage from './features/history/HistoryPage';
+import PlannerPage from './features/planner/PlannerPage';
+import GuestViewPage from './features/guest/GuestViewPage';
 import NotFoundPage from './features/NotFoundPage';
 
 function App() {
@@ -16,6 +18,7 @@ function App() {
         {/* Public Routes (no auth needed) */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/guest/:username" element={<GuestViewPage />} />
 
         {/* Protected Routes (must be logged in) */}
         <Route
@@ -30,6 +33,7 @@ function App() {
           <Route path="/profile/edit" element={<ProfileSetupPage />} />
           <Route path="/report/new" element={<ReportFormPage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/planner" element={<PlannerPage />} />
         </Route>
 
         {/* Redirects & Fallback */}

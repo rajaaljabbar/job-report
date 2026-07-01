@@ -22,6 +22,7 @@ export default function ProfileSetupPage() {
   const [newJobdesc, setNewJobdesc] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
@@ -72,6 +73,26 @@ export default function ProfileSetupPage() {
       setEditingId(null);
       setEditText('');
     }
+  };
+
+  const handleCopyLink = async () => {
+    const username = user?.email?.split('@')[0] || 'username';
+    const link = `${window.location.origin}/guest/${username}`;
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      // Fallback for older browsers / non-HTTPS
+      const textarea = document.createElement('textarea');
+      textarea.value = link;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const colors = ['bg-secondary-container', 'bg-tertiary-container', 'bg-primary-container'];
@@ -196,6 +217,35 @@ export default function ProfileSetupPage() {
               <span className="material-symbols-outlined text-lg">add</span>
               Tambah
             </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 3: Share Link (Guest View) */}
+      <section className="bg-surface-container-lowest rounded-xl border border-surface-variant shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-surface-variant bg-surface-bright/50">
+          <h2 className="text-lg font-semibold text-on-surface">Bagikan ke Atasan</h2>
+          <p className="text-sm text-on-surface-variant mt-1">Atasan bisa melihat dashboard &amp; history kamu tanpa login.</p>
+        </div>
+        <div className="p-6 flex flex-col gap-3">
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed border-primary/30 bg-primary-container/5">
+            <span className="material-symbols-outlined text-primary text-2xl">share</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-on-surface-variant mb-1">Link Guest View</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-sm text-primary bg-surface-container px-3 py-2 rounded-lg truncate select-all">
+                  {window.location.origin}/guest/{user?.email?.split('@')[0] || 'username'}
+                </code>
+                <button
+                  onClick={handleCopyLink}
+                  className="h-10 px-4 rounded-lg bg-primary text-on-primary text-xs font-semibold hover:bg-surface-tint transition-colors flex items-center gap-1 whitespace-nowrap"
+                >
+                  <span className="material-symbols-outlined text-base">{copied ? 'check' : 'content_copy'}</span>
+                  {copied ? 'Tersalin!' : 'Salin'}
+                </button>
+              </div>
+              <p className="text-xs text-on-surface-variant mt-2">Bagikan link ini ke atasan agar bisa melihat laporanmu (read-only).</p>
+            </div>
           </div>
         </div>
       </section>

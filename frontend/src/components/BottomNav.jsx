@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 const navItems = [
   { path: '/dashboard', icon: 'home', label: 'Home' },
   { path: '/history', icon: 'schedule', label: 'History' },
+  { path: '/planner', icon: 'event_available', label: 'Planner' },
   { path: '/profile/edit', icon: 'person', label: 'Profile' },
 ];
 

@@ -50,3 +50,12 @@
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d9dadb; border-radius: 20px; }
+
+button, a {
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+button:active, a:active {
+  transform: scale(0.95);
+  opacity: 0.85;
+}

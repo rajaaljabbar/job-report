@@ -1,0 +1,514 @@
+================================================================================
+  IT SUPPORT TRACKER — BACKEND PLAN v3.0
+  Stack: Supabase (DB + Auth) + Cloudinary (File Storage)
+  Update: 30 Juni 2026
+================================================================================
+
+🏆 ARSITEKTUR: FRONTEND-ONLY (NO BACKEND SERVER!)
+--------------------------------------------------------------------------------
+
+  Kenapa gak perlu backend Express:
+  - Supabase menyediakan JS client (@supabase/supabase-js) yang bisa
+    dipanggil LANGSUNG dari React — gak perlu REST API buatan sendiri
+  - Cloudinary menyediakan JS client + Upload Widget — upload LANGSUNG
+  - Auth JWT sudah di-handle Supabase (tinggal panggil signIn/signUp)
+  - Row-Level Security (RLS) amankan data di level database
+
+  ┌─────────────────────────────────────────────────────┐
+  │                   React Frontend                     │
+  │                                                     │
+  │  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
+  │  │ Zustand  │  │ Zustand  │  │ Zustand          │  │
+  │  │ authStore│  │ jobdesc  │  │ reportStore      │  │
+  │  │          │  │ Store    │  │                  │  │
+  │  └────┬─────┘  └────┬─────┘  └────────┬─────────┘  │
+  │       │             │                │             │
+  └───────┼─────────────┼────────────────┼─────────────┘
+          │             │                │
+          ▼             ▼                ▼
+  ┌──────────────┐      │        ┌──────────────┐
+  │  Supabase    │◄─────┘        │  Cloudinary  │
+  │  • Database  │               │  • Upload    │
+  │  • Auth JWT  │               │  • Resize    │
+  │  • RLS       │               │  • Optimize  │
+  └──────────────┘               └──────────────┘
+
+
+🔑 1. SETUP SUPABASE (Database + Auth)
+--------------------------------------------------------------------------------
+
+  Langkah setup di Supabase Dashboard:
+
+  1. Buka https://supabase.com → project kamu
+  2. Settings → API → copy:
+     - Project URL:     https://xxxxx.supabase.co
+     - anon public key: eyJhbGciOi...
+  3. Simpan di frontend .env:
+     VITE_SUPABASE_URL=https://xxxxx.supabase.co
+     VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+
+  4. Authentication → Providers → Google → Enable
+     - Masukkan Google Client ID & Secret
+     (dari Google Cloud Console → APIs → OAuth 2.0)
+
+  5. SQL Editor → jalankan migration untuk buat tabel:
+
+     -- ===== USERS =====
+     CREATE TABLE users (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       email VARCHAR(255) UNIQUE NOT NULL,
+       full_name VARCHAR(150) NOT NULL,
+       position VARCHAR(150),
+       avatar_url TEXT,
+       created_at TIMESTAMPTZ DEFAULT NOW(),
+       updated_at TIMESTAMPTZ DEFAULT NOW()
+     );
+
+     -- ===== JOBDESCS =====
+     CREATE TABLE jobdescs (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       text TEXT NOT NULL,
+       sort_order INT DEFAULT 0,
+       created_at TIMESTAMPTZ DEFAULT NOW(),
+       updated_at TIMESTAMPTZ DEFAULT NOW(),
+       UNIQUE(user_id, text)
+     );
+
+     -- ===== REPORTS =====
+     CREATE TYPE report_category AS ENUM ('jobdesc', 'improvement', 'helpUser');
+
+     CREATE TABLE reports (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       jobdesc_id UUID REFERENCES jobdescs(id) ON DELETE SET NULL,
+       category report_category NOT NULL,
+       date_worked DATE NOT NULL,
+       title VARCHAR(300) NOT NULL,
+       description TEXT NOT NULL,
+       user_name VARCHAR(150),
+       is_user_requested BOOLEAN DEFAULT FALSE,
+       created_at TIMESTAMPTZ DEFAULT NOW(),
+       updated_at TIMESTAMPTZ DEFAULT NOW()
+     );
+
+     CREATE INDEX idx_reports_user_date ON reports(user_id, date_worked DESC);
+     CREATE INDEX idx_reports_user_category ON reports(user_id, category);
+
+     -- ===== REPORT EVIDENCE =====
+     CREATE TABLE report_evidence (
+       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+       report_id UUID NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+       file_url TEXT NOT NULL,
+       cloudinary_public_id VARCHAR(255),
+       file_name VARCHAR(255),
+       file_size INT,
+       mime_type VARCHAR(50),
+       created_at TIMESTAMPTZ DEFAULT NOW()
+     );
+
+     -- ===== ROW LEVEL SECURITY =====
+     ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+     ALTER TABLE jobdescs ENABLE ROW LEVEL SECURITY;
+     ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+     ALTER TABLE report_evidence ENABLE ROW LEVEL SECURITY;
+
+     -- Users: hanya bisa lihat & edit diri sendiri
+     CREATE POLICY "Users view own" ON users
+       FOR SELECT USING (auth.uid() = id);
+     CREATE POLICY "Users update own" ON users
+       FOR UPDATE USING (auth.uid() = id);
+
+     -- Jobdescs: CRUD untuk milik sendiri
+     CREATE POLICY "CRUD own jobdescs" ON jobdescs
+       FOR ALL USING (auth.uid() = user_id);
+
+     -- Reports: CRUD untuk milik sendiri
+     CREATE POLICY "CRUD own reports" ON reports
+       FOR ALL USING (auth.uid() = user_id);
+
+     -- Report Evidence: CRUD via report kepemilikan
+     CREATE POLICY "CRUD own evidences" ON report_evidence
+       FOR ALL USING (
+         report_id IN (
+           SELECT id FROM reports WHERE user_id = auth.uid()
+         )
+       );
+
+   6. Trigger auto-create user setelah signup:
+      (Supabase Auth → user terdaftar → otomatis insert ke public.users)
+
+      CREATE OR REPLACE FUNCTION public.handle_new_user()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        INSERT INTO public.users (id, email, full_name, avatar_url)
+        VALUES (
+          NEW.id,
+          NEW.email,
+          COALESCE(NEW.raw_user_meta_data ->> 'full_name', NEW.email),
+          COALESCE(NEW.raw_user_meta_data ->> 'avatar_url', '')
+        );
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+      CREATE TRIGGER on_auth_user_created
+        AFTER INSERT ON auth.users
+        FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
+🖼️ 2. SETUP CLOUDINARY (File Upload)
+--------------------------------------------------------------------------------
+
+  Langkah setup:
+
+  1. Buka https://cloudinary.com → Sign Up (Free)
+  2. Dashboard → copy:
+     - Cloud Name:  dxxxxxx
+     - API Key:     123456789012345
+     - API Secret:  xxxxxxxxxxxxxxx
+  3. Simpan di frontend .env:
+     VITE_CLOUDINARY_CLOUD_NAME=dxxxxxx
+     VITE_CLOUDINARY_UPLOAD_PRESET=it_tracker_unsigned
+
+  4. Settings → Upload → Upload Presets → Add upload preset:
+     - Preset name: it_tracker_unsigned
+     - Signing Mode: Unsigned
+     - Folder: it-tracker-evidences
+     - Access Mode: Public
+     - (Optional) Incoming Transformation: w_1200 (auto-resize max 1200px)
+
+  5. Install di frontend:
+     npm install cloudinary-react
+     (atau upload manual via fetch, gak perlu library)
+
+  Upload code di frontend (3 baris!):
+
+    const uploadToCloudinary = async (file) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET);
+      formData.append('folder', 'it-tracker-evidences');
+
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+        { method: 'POST', body: formData }
+      );
+      const data = await res.json();
+      return {
+        url: data.secure_url,           // https://res.cloudinary.com/...
+        publicId: data.public_id,        // untuk delete nanti
+        width: data.width,
+        height: data.height,
+        size: data.bytes,
+        format: data.format,
+      };
+    };
+
+  Delete file (opsional, saat user hapus evidence):
+
+    import { SHA256 } from 'crypto-js';  // atau crypto.subtle
+
+    const deleteFromCloudinary = async (publicId) => {
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signature = await generateSignature(publicId, timestamp);
+      // ... kirim POST ke cloudinary destroy API
+    };
+
+  Catatan: Untuk delete, perlu generate signature pakai API Secret.
+  Simpelnya: gak usah delete dari Cloudinary. Biarkan saja.
+  25GB gratis, gak akan cepat penuh.
+
+
+📡 3. SUPABASE JS CLIENT — API CALLS DARI REACT
+--------------------------------------------------------------------------------
+
+  // src/lib/supabase.js
+
+  import { createClient } from '@supabase/supabase-js';
+
+  export const supabase = createClient(
+    import.meta.env.VITE_SUPABASE_URL,
+    import.meta.env.VITE_SUPABASE_ANON_KEY
+  );
+
+  ==== AUTH ====
+
+  // Register
+  const { data, error } = await supabase.auth.signUp({
+    email: 'user@example.com',
+    password: 'password123',
+    options: {
+      data: { full_name: 'Putra Raja' }  // → masuk ke raw_user_meta_data
+    }
+  });
+
+  // Login (email + password)
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: 'user@example.com',
+    password: 'password123'
+  });
+
+  // Google OAuth
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      redirectTo: window.location.origin + '/dashboard'
+    }
+  });
+
+  // Logout
+  await supabase.auth.signOut();
+
+  // Get current session
+  const { data: { session } } = await supabase.auth.getSession();
+  // session.user.id → UUID user
+  // session.access_token → JWT (auto-attached by supabase client)
+
+
+  ==== PROFILE ====
+
+  // Get profile
+  const { data: profile } = await supabase
+    .from('users')
+    .select('*')
+    .eq('id', user.id)
+    .single();
+
+  // Update profile
+  const { error } = await supabase
+    .from('users')
+    .update({ full_name: 'Putra Raja A.', position: 'IT Support' })
+    .eq('id', user.id);
+
+
+  ==== JOBDESCS ====
+
+  // List jobdescs
+  const { data: jobdescs } = await supabase
+    .from('jobdescs')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('sort_order', { ascending: true });
+
+  // Add jobdesc
+  const { data, error } = await supabase
+    .from('jobdescs')
+    .insert({ user_id: user.id, text: 'Monitoring jaringan' })
+    .select()
+    .single();
+
+  // Update jobdesc
+  await supabase.from('jobdescs').update({ text: '...' }).eq('id', id);
+
+  // Delete jobdesc
+  await supabase.from('jobdescs').delete().eq('id', id);
+
+
+  ==== REPORTS ====
+
+  // List reports (dengan filter)
+  let query = supabase
+    .from('reports')
+    .select('*, jobdescs(text), report_evidence(*)')
+    .eq('user_id', user.id)
+    .order('date_worked', { ascending: false });
+
+  if (search) query = query.ilike('title', `%${search}%`);
+  if (category !== 'all') query = query.eq('category', category);
+  if (dateFrom) query = query.gte('date_worked', dateFrom);
+  if (dateTo) query = query.lte('date_worked', dateTo);
+
+  const { data: reports } = await query.range(0, 19); // pagination
+
+  // Get stats (untuk dashboard chart)
+  const { data: stats } = await supabase
+    .from('reports')
+    .select('category')
+    .eq('user_id', user.id)
+    .gte('date_worked', '2026-06-01')
+    .lte('date_worked', '2026-06-30');
+
+  // Hitung manual di JS:
+  // stats.filter(r => r.category === 'jobdesc').length → 15
+  // stats.filter(r => r.category === 'improvement').length → 8
+  // stats.filter(r => r.category === 'helpUser').length → 7
+
+  // Recent 3 activities
+  const { data: recent } = await supabase
+    .from('reports')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('date_worked', { ascending: false })
+    .limit(3);
+
+  // Create report
+  const { data: report, error } = await supabase
+    .from('reports')
+    .insert({
+      user_id: user.id,
+      jobdesc_id: jobdescId || null,
+      category: 'jobdesc',
+      date_worked: '2026-06-30',
+      title: 'Monitoring jaringan kantor',
+      description: '...',
+      user_name: 'Bu Rina (Finance)',
+      is_user_requested: true,
+    })
+    .select()
+    .single();
+
+  // Insert evidence (setelah report dibuat)
+  await supabase.from('report_evidence').insert({
+    report_id: report.id,
+    file_url: cloudinaryUrl,
+    cloudinary_public_id: publicId,
+    file_name: 'screenshot.jpg',
+    file_size: 204800,
+    mime_type: 'image/jpeg',
+  });
+
+
+🗂️ 4. UPDATED FOLDER STRUCTURE (Frontend + Supabase + Cloudinary)
+--------------------------------------------------------------------------------
+
+  frontend/
+    .env                        ← VITE_SUPABASE_URL, VITE_CLOUDINARY_*
+    src/
+      lib/
+        supabase.js              ← Supabase JS client
+        cloudinary.js            ← Cloudinary upload helper
+      stores/
+        authStore.js             ← Supabase auth calls
+        jobdescStore.js          ← Supabase jobdesc CRUD
+        reportStore.js           ← Supabase report CRUD
+      components/
+        ... (existing)
+      features/
+        ... (existing)
+    ... (no backend folder needed!)
+
+
+🔄 5. MIGRASI: DARI MOCK STORE KE SUPABASE REAL
+--------------------------------------------------------------------------------
+
+  Sebelumnya (mock):                 Sekarang (Supabase):
+  ─────────────────────────────────────────────────────────────
+  authStore.js:
+    login(email, pw)                 supabase.auth.signInWithPassword(...)
+    → set({ isAuthenticated: true }) → data.session.user
+    loginWithGoogle()                supabase.auth.signInWithOAuth({ provider: 'google' })
+    register(name, email, pw)        supabase.auth.signUp(...)
+
+  jobdescStore.js:
+    items: [...]                     supabase.from('jobdescs').select('*')
+    addJobdesc(text)                 supabase.from('jobdescs').insert(...)
+    updateJobdesc(id, text)          supabase.from('jobdescs').update(...).eq('id', id)
+    deleteJobdesc(id)                supabase.from('jobdescs').delete().eq('id', id)
+
+  reportStore.js:
+    monthlyStats: {...}              supabase.from('reports').select('category') + hitung JS
+    recentActivities: [...]          supabase.from('reports').select('*').limit(3)
+    allReports: [...]                supabase.from('reports').select('*')
+    submitReport(data)               supabase.from('reports').insert(...)
+
+  Evidence upload (sebelumnya mock):
+    evidence: File[]                 Cloudinary upload → dapat URL → simpan ke report_evidence
+
+
+🔐 6. AUTH MIDDLEWARE (React Router)
+--------------------------------------------------------------------------------
+
+  // src/components/AuthGuard.jsx — update
+
+  import { useEffect, useState } from 'react';
+  import { Navigate, useLocation } from 'react-router-dom';
+  import { supabase } from '../lib/supabase';
+
+  export default function AuthGuard({ children }) {
+    const [session, setSession] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const location = useLocation();
+
+    useEffect(() => {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        setLoading(false);
+      });
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        (_event, session) => setSession(session)
+      );
+      return () => subscription.unsubscribe();
+    }, []);
+
+    if (loading) {
+      return <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>;
+    }
+
+    if (!session) {
+      return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    }
+
+    return children;
+  }
+
+
+📦 7. ENVIRONMENT VARIABLES (.env)
+--------------------------------------------------------------------------------
+
+  // frontend/.env
+
+  VITE_SUPABASE_URL=https://xxxxx.supabase.co
+  VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  VITE_CLOUDINARY_CLOUD_NAME=dxxxxxx
+  VITE_CLOUDINARY_UPLOAD_PRESET=it_tracker_unsigned
+
+  // frontend/.env.example (commit ke git)
+  VITE_SUPABASE_URL=your_supabase_url
+  VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+  VITE_CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+  VITE_CLOUDINARY_UPLOAD_PRESET=it_tracker_unsigned
+
+
+🚀 8. IMPLEMENTATION ORDER
+--------------------------------------------------------------------------------
+
+  Phase 1 — Supabase Setup:
+    ☐ 1. Buka Supabase dashboard, enable Google OAuth provider
+    ☐ 2. SQL Editor → jalankan CREATE TABLE + RLS policies
+    ☐ 3. SQL Editor → jalankan trigger handle_new_user
+    ☐ 4. Copy URL & anon key ke frontend .env
+    ☐ 5. Install @supabase/supabase-js di frontend
+    ☐ 6. Buat src/lib/supabase.js
+
+  Phase 2 — Cloudinary Setup:
+    ☐ 7. Buka Cloudinary, copy cloud name
+    ☐ 8. Buat unsigned upload preset
+    ☐ 9. Copy credentials ke frontend .env
+    ☐ 10. Buat src/lib/cloudinary.js (upload helper)
+
+  Phase 3 — Auth Migration:
+    ☐ 11. Update authStore.js → Supabase auth
+    ☐ 12. Update AuthGuard.jsx → cek session Supabase
+    ☐ 13. Update LoginPage → signInWithPassword / signInWithOAuth
+    ☐ 14. Update RegisterPage → signUp
+    ☐ 15. Test: register → login → auto-redirect
+
+  Phase 4 — Data Migration:
+    ☐ 16. Update jobdescStore.js → Supabase CRUD
+    ☐ 17. Update reportStore.js → Supabase CRUD + filter
+    ☐ 18. Update ReportFormPage → Cloudinary upload sebelum insert
+    ☐ 19. Update Dashboard → real stats dari Supabase
+    ☐ 20. Update HistoryPage → real data dari Supabase
+
+  Phase 5 — Polish:
+    ☐ 21. Loading states, error handling
+    ☐ 22. Optimistic UI updates
+    ☐ 23. Real-time subscriptions (opsional, utk live update)
+
+================================================================================
+                            END OF BACKEND PLAN v3.0
+================================================================================
