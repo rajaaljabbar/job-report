@@ -34,7 +34,29 @@ export default function GuestViewPage() {
   const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
 
   // History month filter
-  const [historyMonth, setHistoryMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
+  const [historyYear, setHistoryYear] = useState(now.getFullYear());
+  const [historyMonthIdx, setHistoryMonthIdx] = useState(now.getMonth());
+  const historyMonth = `${historyYear}-${String(historyMonthIdx + 1).padStart(2, '0')}`;
+  const isHistoryCurrentMonth = historyYear === now.getFullYear() && historyMonthIdx === now.getMonth();
+
+  const goToPrevHistoryMonth = () => {
+    if (historyMonthIdx === 0) {
+      setHistoryMonthIdx(11);
+      setHistoryYear((y) => y - 1);
+    } else {
+      setHistoryMonthIdx((m) => m - 1);
+    }
+  };
+
+  const goToNextHistoryMonth = () => {
+    if (isHistoryCurrentMonth) return;
+    if (historyMonthIdx === 11) {
+      setHistoryMonthIdx(0);
+      setHistoryYear((y) => y + 1);
+    } else {
+      setHistoryMonthIdx((m) => m + 1);
+    }
+  };
 
   useEffect(() => {
     if (username) {
@@ -47,6 +69,13 @@ export default function GuestViewPage() {
       });
     }
   }, [username, selectedYear, selectedMonth]);
+
+  // Fetch reports for history tab whenever month filter changes
+  useEffect(() => {
+    if (username) {
+      fetchGuestReports(username, historyYear, historyMonthIdx);
+    }
+  }, [username, historyYear, historyMonthIdx, activeTab]);
 
   const goToPrevMonth = () => {
     if (selectedMonth === 0) {
@@ -299,7 +328,19 @@ export default function GuestViewPage() {
 
             {/* Recent Activities */}
             <section>
-              <h3 className="text-lg font-bold text-on-surface mb-4">Aktivitas Terakhir</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-on-surface">Aktivitas Terakhir</h3>
+                <button
+                  onClick={() => {
+                    setHistoryYear(selectedYear);
+                    setHistoryMonthIdx(selectedMonth);
+                    setActiveTab('history');
+                  }}
+                  className="text-xs font-semibold text-primary hover:underline"
+                >
+                  Lihat Semua &gt;
+                </button>
+              </div>
               <div className="flex flex-col gap-3">
                 {recentActivities.map((activity) => {
                   const cfg = categoryMap[activity.category] || categoryMap.jobdesc;
@@ -349,12 +390,24 @@ export default function GuestViewPage() {
                   placeholder="Cari judul atau user..."
                 />
               </div>
-              <input
-                type="month"
-                value={historyMonth}
-                onChange={(e) => setHistoryMonth(e.target.value)}
-                className="h-10 px-3 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
-              />
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={goToPrevHistoryMonth}
+                  className="h-10 px-2 flex items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-low transition-colors"
+                >
+                  <span className="material-symbols-outlined text-lg">chevron_left</span>
+                </button>
+                <span className="h-10 px-3 flex items-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface text-sm font-semibold min-w-[130px] justify-center">
+                  {monthNames[historyMonthIdx]} {historyYear}
+                </span>
+                <button
+                  onClick={goToNextHistoryMonth}
+                  disabled={isHistoryCurrentMonth}
+                  className="h-10 px-2 flex items-center justify-center rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-low transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <span className="material-symbols-outlined text-lg">chevron_right</span>
+                </button>
+              </div>
               <select
                 value={catFilter} onChange={(e) => setCatFilter(e.target.value)}
                 className="h-10 px-4 rounded-lg border border-outline-variant bg-surface-container-lowest text-on-surface text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none"
