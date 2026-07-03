@@ -3,11 +3,14 @@ import { Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../stores/authStore';
 
 export default function AuthGuard({ children }) {
-  const { isAuthenticated, isProfileComplete, isLoading, initAuth } = useAuthStore();
+  const { isAuthenticated, isProfileComplete, isLoading, initAuth, cleanupAuth } = useAuthStore();
   const location = useLocation();
 
   useEffect(() => {
     initAuth();
+    return () => {
+      cleanupAuth();
+    };
   }, []);
 
   // Show spinner while checking session

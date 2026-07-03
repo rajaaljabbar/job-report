@@ -7,6 +7,7 @@ const useAuthStore = create((set, get) => ({
   isAuthenticated: false,
   isProfileComplete: false,
   isLoading: true,
+  _authSubscription: null,
 
   // Auto-check session on app load
   initAuth: async () => {
@@ -38,8 +39,12 @@ const useAuthStore = create((set, get) => ({
       set({ user: null, session: null, isAuthenticated: false, isLoading: false });
     }
 
+    // Unsubscribe previous listener before creating a new one
+    const prevSub = get()._authSubscription;
+    if (prevSub) prevSub.unsubscribe();
+
     // Listen for auth changes
-    supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         supabase.from('users').select('*').eq('id', session.user.id).single()
           .then(({ data: profile }) => {
@@ -54,6 +59,16 @@ const useAuthStore = create((set, get) => ({
         set({ user: null, session: null, isAuthenticated: false, isProfileComplete: false });
       }
     });
+
+    set({ _authSubscription: subscription });
+  },
+
+  cleanupAuth: () => {
+    const sub = get()._authSubscription;
+    if (sub) {
+      sub.unsubscribe();
+      set({ _authSubscription: null });
+    }
   },
 
   login: async (email, password) => {
