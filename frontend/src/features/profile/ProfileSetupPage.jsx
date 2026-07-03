@@ -16,6 +16,7 @@ export default function ProfileSetupPage() {
   }, []);
 
   const [name, setName] = useState(user?.name || '');
+  const [username, setUsername] = useState(user?.username || '');
   const [position, setPosition] = useState(user?.position || '');
   const [avatar, setAvatar] = useState(user?.avatar || '');
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -23,6 +24,7 @@ export default function ProfileSetupPage() {
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState('');
   const [copied, setCopied] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
 
   const handleAvatarClick = () => {
     fileInputRef.current?.click();
@@ -45,8 +47,19 @@ export default function ProfileSetupPage() {
   };
 
   const handleSave = async () => {
+    // Validate username
+    if (!username.trim()) {
+      setUsernameError('Username wajib diisi.');
+      return;
+    }
+    if (!/^[a-z0-9_]{3,30}$/.test(username.trim())) {
+      setUsernameError('Username hanya boleh huruf kecil, angka, dan underscore (3-30 karakter).');
+      return;
+    }
+    setUsernameError('');
+
     try {
-      await updateProfile({ name, position, avatar });
+      await updateProfile({ name, username: username.trim().toLowerCase(), position, avatar });
       // Hard redirect to force fresh auth check
       window.location.href = '/dashboard';
     } catch (err) {
@@ -76,8 +89,8 @@ export default function ProfileSetupPage() {
   };
 
   const handleCopyLink = async () => {
-    const username = user?.email?.split('@')[0] || 'username';
-    const link = `${window.location.origin}/guest/${username}`;
+    const guestUsername = user?.username || user?.email?.split('@')[0] || 'username';
+    const link = `${window.location.origin}/guest/${guestUsername}`;
     try {
       await navigator.clipboard.writeText(link);
     } catch {
@@ -160,6 +173,19 @@ export default function ProfileSetupPage() {
                 className="w-full h-12 px-4 rounded-lg border border-outline-variant bg-surface-container-lowest text-base text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow" />
             </div>
             <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-on-surface-variant" htmlFor="username">Username <span className="text-on-surface-variant/50 font-normal">(untuk link guest view)</span></label>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-xl">alternate_email</span>
+                <input id="username" type="text" value={username} onChange={(e) => { setUsername(e.target.value); setUsernameError(''); }}
+                  className={`w-full h-12 pl-10 pr-4 rounded-lg border bg-surface-container-lowest text-base text-on-surface focus:ring-1 focus:ring-primary outline-none transition-shadow ${usernameError ? 'border-error focus:border-error' : 'border-outline-variant focus:border-primary'}`}
+                  placeholder="username_kamu" />
+              </div>
+              {usernameError && <p className="text-xs text-error">{usernameError}</p>}
+              {!usernameError && username && (
+                <p className="text-xs text-on-surface-variant">Guest link: {window.location.origin}/guest/<strong>{username.trim().toLowerCase() || '...'}</strong></p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-on-surface-variant" htmlFor="position">Position</label>
               <input id="position" type="text" value={position} onChange={(e) => setPosition(e.target.value)}
                 className="w-full h-12 px-4 rounded-lg border border-outline-variant bg-surface-container-lowest text-base text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow" />
@@ -234,7 +260,7 @@ export default function ProfileSetupPage() {
               <p className="text-xs font-semibold text-on-surface-variant mb-1">Link Guest View</p>
               <div className="flex items-center gap-2">
                 <code className="flex-1 text-sm text-primary bg-surface-container px-3 py-2 rounded-lg truncate select-all">
-                  {window.location.origin}/guest/{user?.email?.split('@')[0] || 'username'}
+                  {window.location.origin}/guest/{user?.username || user?.email?.split('@')[0] || 'username'}
                 </code>
                 <button
                   onClick={handleCopyLink}

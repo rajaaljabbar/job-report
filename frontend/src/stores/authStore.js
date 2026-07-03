@@ -26,6 +26,7 @@ const useAuthStore = create((set, get) => ({
           id: profile.id,
           name: profile.full_name,
           email: session.user.email,
+          username: profile.username || '',
           position: profile.position || '',
           avatar: profile.avatar_url || '',
         } : null,
@@ -44,7 +45,7 @@ const useAuthStore = create((set, get) => ({
           .then(({ data: profile }) => {
             set({
               session,
-              user: profile ? { id: profile.id, name: profile.full_name, email: session.user.email, position: profile.position || '', avatar: profile.avatar_url || '' } : null,
+              user: profile ? { id: profile.id, name: profile.full_name, email: session.user.email, username: profile.username || '', position: profile.position || '', avatar: profile.avatar_url || '' } : null,
               isAuthenticated: true,
               isProfileComplete: !!(profile?.full_name && profile?.position),
             });
@@ -63,7 +64,7 @@ const useAuthStore = create((set, get) => ({
 
     set({
       session: data.session,
-      user: profile ? { id: profile.id, name: profile.full_name, email, position: profile.position || '', avatar: profile.avatar_url || '' } : null,
+      user: profile ? { id: profile.id, name: profile.full_name, email, username: profile.username || '', position: profile.position || '', avatar: profile.avatar_url || '' } : null,
       isAuthenticated: true,
       isProfileComplete: !!(profile?.full_name && profile?.position),
     });
@@ -88,7 +89,7 @@ const useAuthStore = create((set, get) => ({
     if (data.user) {
       set({
         session: data.session,
-        user: { id: data.user.id, name, email, position: '', avatar: '' },
+        user: { id: data.user.id, name, email, username: '', position: '', avatar: '' },
         isAuthenticated: true,
         isProfileComplete: false,
       });
@@ -110,6 +111,7 @@ const useAuthStore = create((set, get) => ({
         id: user.id,
         email: user.email,
         full_name: profileData.name,
+        username: profileData.username,
         position: profileData.position,
         avatar_url: profileData.avatar,
         updated_at: new Date().toISOString(),
@@ -118,7 +120,7 @@ const useAuthStore = create((set, get) => ({
     if (error) throw error;
 
     set((state) => ({
-      user: { ...state.user, name: profileData.name, position: profileData.position, avatar: profileData.avatar || state.user.avatar },
+      user: { ...state.user, name: profileData.name, username: profileData.username, position: profileData.position, avatar: profileData.avatar || state.user.avatar },
       isProfileComplete: true,
     }));
   },
