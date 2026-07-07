@@ -3,6 +3,7 @@ import useAuthStore from '../stores/authStore';
 
 const navItems = [
   { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
+  { path: '/planner', icon: 'event_available', label: 'Planner' },
   { path: '/history', icon: 'history', label: 'Timeline' },
   { path: '/profile/edit', icon: 'settings', label: 'Settings' },
 ];
