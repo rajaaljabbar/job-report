@@ -4,7 +4,6 @@ import useAuthStore from '../stores/authStore';
 const navItems = [
   { path: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
   { path: '/history', icon: 'history', label: 'Timeline' },
-  { path: '/planner', icon: 'event_available', label: 'Planner' },
   { path: '/profile/edit', icon: 'settings', label: 'Settings' },
 ];
 
@@ -63,6 +62,13 @@ export default function Sidebar() {
 
         {/* Footer */}
         <div className="mt-auto px-2 flex flex-col gap-1 pt-4 border-t border-surface-variant">
+          <Link
+            to="/profile/edit"
+            className="flex items-center gap-3 px-4 py-3 text-xs font-semibold text-on-surface-variant hover:bg-surface-container-high transition-all rounded-r-lg"
+          >
+            <span className="material-symbols-outlined">help</span>
+            Help
+          </Link>
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 text-xs font-semibold text-error hover:bg-error-container/20 transition-all rounded-r-lg w-full text-left"

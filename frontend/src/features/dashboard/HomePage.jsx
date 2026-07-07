@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts';
 import useAuthStore from '../../stores/authStore';
@@ -6,42 +6,15 @@ import useReportStore from '../../stores/reportStore';
 
 const COLORS = { jobdesc: '#10b981', improvement: '#2170e4', helpUser: '#e29100' };
 
-const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-
 export default function HomePage() {
   const user = useAuthStore((s) => s.user);
   const { monthlyStats, recentActivities, fetchMonthlyStats, fetchRecentActivities } = useReportStore();
   const navigate = useNavigate();
 
-  const now = new Date();
-  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
-  const [selectedMonth, setSelectedMonth] = useState(now.getMonth()); // 0-indexed
-
-  const isCurrentMonth = selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
-
   useEffect(() => {
-    fetchMonthlyStats(selectedYear, selectedMonth);
-    fetchRecentActivities(selectedYear, selectedMonth);
-  }, [selectedYear, selectedMonth]);
-
-  const goToPrevMonth = () => {
-    if (selectedMonth === 0) {
-      setSelectedMonth(11);
-      setSelectedYear((y) => y - 1);
-    } else {
-      setSelectedMonth((m) => m - 1);
-    }
-  };
-
-  const goToNextMonth = () => {
-    if (isCurrentMonth) return;
-    if (selectedMonth === 11) {
-      setSelectedMonth(0);
-      setSelectedYear((y) => y + 1);
-    } else {
-      setSelectedMonth((m) => m + 1);
-    }
-  };
+    fetchMonthlyStats();
+    fetchRecentActivities();
+  }, []);
 
   const chartData = [
     { name: 'Jobdesc Utama', value: monthlyStats.jobdesc, color: COLORS.jobdesc },
@@ -50,9 +23,8 @@ export default function HomePage() {
   ];
 
   // SLA: % working days this month with at least 1 report
-  const activeDays = monthlyStats.daysWithReport;
-  const slaText = monthlyStats.workingDays > 0
-    ? Math.min(Math.round((activeDays / monthlyStats.workingDays) * 100), 100) + '%'
+  const slaText = monthlyStats.total > 0
+    ? Math.min(Math.round((monthlyStats.daysWithReport / monthlyStats.workingDays) * 100), 100) + '%'
     : '-';
 
   const categoryConfig = {
@@ -77,69 +49,13 @@ export default function HomePage() {
       {/* Hero Analytics */}
       <section className="grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-6">
         {/* Scoreboard */}
-        <div className="md:col-span-4 bg-surface-container-lowest border border-outline-variant shadow-sm rounded-xl p-6 flex flex-col justify-center items-center text-center gap-4">
-          <div className="w-12 h-12 rounded-full bg-primary-container/20 text-primary flex items-center justify-center">
+        <div className="md:col-span-4 bg-surface-container-lowest border border-outline-variant shadow-sm rounded-xl p-6 flex flex-col justify-center items-center text-center">
+          <div className="w-12 h-12 rounded-full bg-primary-container/20 text-primary flex items-center justify-center mb-4">
             <span className="material-symbols-outlined filled text-3xl">task_alt</span>
           </div>
-          <div>
-            <h3 className="text-5xl font-bold text-on-surface leading-tight">{monthlyStats.total}</h3>
-            <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mt-1">Total Tugas</p>
-          </div>
-
-          {/* Mini Stats */}
-          <div className="grid grid-cols-2 gap-2 w-full">
-            <div className="bg-surface-container rounded-lg px-3 py-2">
-              <p className="text-lg font-bold text-on-surface">{activeDays}</p>
-              <p className="text-[10px] text-on-surface-variant">Hari Aktif</p>
-            </div>
-            <div className="bg-surface-container rounded-lg px-3 py-2">
-              <p className="text-lg font-bold text-on-surface">{slaText}</p>
-              <p className="text-[10px] text-on-surface-variant">SLA</p>
-            </div>
-          </div>
-
-          {/* Category Breakdown */}
-          <div className="flex items-center justify-center gap-4 w-full">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS.jobdesc }} />
-              <span className="text-xs text-on-surface-variant">{monthlyStats.jobdesc}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS.improvement }} />
-              <span className="text-xs text-on-surface-variant">{monthlyStats.improvement}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS.helpUser }} />
-              <span className="text-xs text-on-surface-variant">{monthlyStats.helpUser}</span>
-            </div>
-          </div>
-
-          {/* Absence Info */}
-          {(monthlyStats.cuti > 0 || monthlyStats.sakit > 0 || monthlyStats.izin > 0) && (
-            <p className="text-[10px] text-on-surface-variant text-center leading-relaxed">
-              Cuti {monthlyStats.cuti} · Sakit {monthlyStats.sakit} · Izin {monthlyStats.izin}
-            </p>
-          )}
-
-          {/* Month Navigator */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={goToPrevMonth}
-              className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container transition-colors"
-            >
-              <span className="material-symbols-outlined text-lg">chevron_left</span>
-            </button>
-            <span className="text-sm font-semibold text-on-surface min-w-[120px] text-center">
-              {monthNames[selectedMonth]} {selectedYear}
-            </span>
-            <button
-              onClick={goToNextMonth}
-              disabled={isCurrentMonth}
-              className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <span className="material-symbols-outlined text-lg">chevron_right</span>
-            </button>
-          </div>
+          <h3 className="text-5xl font-bold text-on-surface leading-tight">{monthlyStats.total}</h3>
+          <p className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mt-2">Total Tugas</p>
+          <p className="text-sm text-on-surface-variant mt-4 bg-surface-container px-3 py-1 rounded-full">Bulan Ini</p>
         </div>
 
         {/* Donut Chart */}
@@ -158,9 +74,8 @@ export default function HomePage() {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-[10px] font-semibold text-on-surface-variant">SLA</span>
-              <span className="text-xl font-bold text-on-surface leading-tight">{slaText}</span>
-              <span className="text-[9px] text-on-surface-variant mt-0.5 leading-tight">{activeDays} / {monthlyStats.workingDays} hari</span>
+              <span className="text-xs font-semibold text-on-surface-variant">SLA</span>
+              <span className="text-2xl font-bold text-on-surface">{slaText}</span>
             </div>
           </div>
 

@@ -21,7 +21,8 @@ const useReportStore = create((set, get) => ({
       .from('reports')
       .select('*, jobdescs(text), report_evidence(*)')
       .eq('user_id', user.id)
-      .order('date_worked', { ascending: false });
+      .order('date_worked', { ascending: false })
+      .order('created_at', { ascending: false });
 
     if (filters.search) {
       query = query.or(`title.ilike.%${filters.search}%,user_name.ilike.%${filters.search}%`);
@@ -126,7 +127,8 @@ const useReportStore = create((set, get) => ({
       .from('reports')
       .select('*')
       .eq('user_id', user.id)
-      .order('date_worked', { ascending: false });
+      .order('date_worked', { ascending: false })
+      .order('created_at', { ascending: false });
 
     // If month/year provided, filter by that month
     if (year !== undefined && month !== undefined) {

@@ -40,7 +40,13 @@ const useGuestStore = create((set, get) => ({
       end_date: endDate,
     }).then(({ data, error }) => {
       if (!error && data) {
-        set({ reports: data });
+        // Sort: newest first (date DESC, created_at DESC)
+        const sorted = [...data].sort((a, b) => {
+          const dateDiff = new Date(b.date_worked) - new Date(a.date_worked);
+          if (dateDiff !== 0) return dateDiff;
+          return new Date(b.created_at) - new Date(a.created_at);
+        });
+        set({ reports: sorted });
       }
       return { error };
     });
@@ -133,7 +139,13 @@ const useGuestStore = create((set, get) => ({
     });
 
     if (!error && data) {
-      const latest = data.slice(0, 3);
+      // Sort newest first
+      const sorted = [...data].sort((a, b) => {
+        const dateDiff = new Date(b.date_worked) - new Date(a.date_worked);
+        if (dateDiff !== 0) return dateDiff;
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+      const latest = sorted.slice(0, 3);
       set({
         recentActivities: latest.map((r) => ({
           id: r.id,

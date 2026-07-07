@@ -19,16 +19,6 @@ export default function RegisterPage() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const validatePassword = (pwd) => {
-    if (pwd.length < 8) return 'Password minimal 8 karakter.';
-    if (!/[A-Z]/.test(pwd)) return 'Password harus mengandung huruf besar (A-Z).';
-    if (!/[a-z]/.test(pwd)) return 'Password harus mengandung huruf kecil (a-z).';
-    if (!/[0-9]/.test(pwd)) return 'Password harus mengandung angka (0-9).';
-    return null;
-  };
-
-  const passwordError = password ? validatePassword(password) : null;
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -41,9 +31,8 @@ export default function RegisterPage() {
       setError('Password tidak cocok.');
       return;
     }
-    const pwdErr = validatePassword(password);
-    if (pwdErr) {
-      setError(pwdErr);
+    if (password.length < 6) {
+      setError('Password minimal 6 karakter.');
       return;
     }
 
@@ -104,31 +93,12 @@ export default function RegisterPage() {
             <div className="relative">
               <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline/70 text-xl">lock</span>
               <input id="password" type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)}
-                className={`w-full h-12 pl-10 pr-10 rounded-lg border bg-surface-container-lowest focus:ring-1 focus:ring-primary text-sm text-on-surface transition-colors placeholder:text-outline/60 outline-none ${passwordError ? 'border-error focus:border-error' : 'border-outline-variant focus:border-primary'}`}
+                className="w-full h-12 pl-10 pr-10 rounded-lg border border-outline-variant bg-surface-container-lowest focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface transition-colors placeholder:text-outline/60 outline-none"
                 placeholder="Buat password" />
               <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-outline/70 hover:text-on-surface transition-colors">
                 <span className="material-symbols-outlined text-xl">{showPassword ? 'visibility' : 'visibility_off'}</span>
               </button>
             </div>
-            {/* Password strength indicator */}
-            {password && (
-              <div className="flex flex-col gap-1 mt-1">
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4].map((level) => {
-                    const strength = password.length >= 8 ? 1 : 0
-                      + (/[a-z]/.test(password) ? 1 : 0)
-                      + (/[A-Z]/.test(password) ? 1 : 0)
-                      + (/[0-9]/.test(password) ? 1 : 0);
-                    const active = level <= strength;
-                    const colors = ['bg-red-400', 'bg-orange-400', 'bg-yellow-400', 'bg-green-500'];
-                    return (
-                      <div key={level} className={`flex-1 h-1.5 rounded-full transition-colors ${active ? colors[strength - 1] || 'bg-green-500' : 'bg-surface-variant'}`} />
-                    );
-                  })}
-                </div>
-                {passwordError && <p className="text-xs text-error">{passwordError}</p>}
-              </div>
-            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
